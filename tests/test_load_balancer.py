@@ -296,7 +296,7 @@ class TestPowerSensorUnavailable:
     """
 
     def test_zero_house_power_with_no_ev(self):
-        """When the power sensor reads zero (e.g. unavailable), the full service capacity is offered to the charger."""
+        """When the app falls back to 0 W (e.g., because the power sensor is unavailable), the full service capacity is offered to the charger."""
         available = compute_available_current(
             house_power_w=0.0,
             max_service_a=32.0,
