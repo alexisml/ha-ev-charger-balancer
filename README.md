@@ -16,7 +16,7 @@ This project gives Home Assistant users a native, no-helper-required solution to
 
 ---
 
-> ⚠️ **Current limitation (PR-1):** This integration currently supports **one charger per instance**. Multiple-charger support (water-filling fair distribution) is planned for Phase 2 (post-MVP). Multiple instances of this integration are not supported — only one config entry can be created. See the [MVP plan](docs/documentation/milestones/01-2026-02-19-mvp-plan.md) for details.
+> ⚠️ **Current limitation (PR-1):** This integration currently supports **one charger per instance**. Multiple-charger support with per-charger prioritization is planned for Phase 2 (post-MVP). Multiple instances of this integration are not supported — only one config entry can be created. See the [MVP plan](docs/documentation/milestones/01-2026-02-19-mvp-plan.md) and the [multi-charger plan](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md) for details.
 
 Status: In development — custom integration (PR-2: core entities + device linking complete)
 
@@ -127,7 +127,7 @@ Key rules:
 
 ### Multi-charger fairness — planned feature
 
-> ⚠️ **Not yet implemented.** Multi-charger support is planned for Phase 2 (post-MVP). The water-filling algorithm is already unit-tested in `tests/test_load_balancer.py` and will be ported into the integration runtime during Phase 2. Possible future approaches include multiple config entries (one per power meter / site) or a single entry with an options flow to add/remove chargers.
+> ⚠️ **Not yet implemented.** Multi-charger support with per-charger prioritization/weighting is planned for Phase 2 (post-MVP). See [`docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md`](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md) for the Phase 2 plan. The water-filling algorithm already unit-tested in `tests/test_load_balancer.py` will feed into that work.
 
 When multiple chargers are active the available current will be distributed fairly using a water-filling algorithm:
 
@@ -156,7 +156,8 @@ Available current pool
 ## Development docs
 
 - All research, plans and design docs for development MUST be placed under `docs/development-memories/` following the filename convention described in [`docs/development-memories/README.md`](docs/development-memories/README.md).
-- See the **MVP plan** (phased roadmap): [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](docs/documentation/milestones/01-2026-02-19-mvp-plan.md)
+- See the **MVP plan** (Phase 1 roadmap): [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](docs/documentation/milestones/01-2026-02-19-mvp-plan.md)
+- See the **multi-charger plan** (Phase 2): [`docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md`](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md)
 - See the current research plan: [`docs/development-memories/2026-02-19-research-plan.md`](docs/development-memories/2026-02-19-research-plan.md)
 - See the lessons learned (AppDaemon/blueprint evaluation): [`docs/development-memories/2026-02-19-lessons-learned.md`](docs/development-memories/2026-02-19-lessons-learned.md)
 - See development docs README: [`docs/development-memories/README.md`](docs/development-memories/README.md)
@@ -176,6 +177,7 @@ Available current pool
 
 For the full research plan, design decisions, and lessons learned, see:
 - [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](docs/documentation/milestones/01-2026-02-19-mvp-plan.md)
+- [`docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md`](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md)
 - [`docs/development-memories/2026-02-19-research-plan.md`](docs/development-memories/2026-02-19-research-plan.md)
 - [`docs/development-memories/2026-02-19-lessons-learned.md`](docs/development-memories/2026-02-19-lessons-learned.md)
 

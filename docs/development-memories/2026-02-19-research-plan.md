@@ -166,11 +166,9 @@ Limitations of the blueprint approach:
 
 ## Implementation roadmap — Custom HACS integration
 
-> The implementation roadmap has been moved to the dedicated **MVP plan** document: [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](../documentation/milestones/01-2026-02-19-mvp-plan.md).
->
-> The roadmap is split into two phases:
-> - **Phase 1 — MVP** (PR-1 through PR-6-MVP): single-charger integration, action execution, observability, and HACS release.
-> - **Phase 2 — Multi-charger support** (PR-5, PR-6): water-filling fairness algorithm and runtime charger management — to be started after the MVP is released and stable.
+> The implementation roadmap has been moved to dedicated milestone documents:
+> - **Phase 1 — MVP plan**: [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](../documentation/milestones/01-2026-02-19-mvp-plan.md) — single-charger integration, action execution, observability, and HACS release.
+> - **Phase 2 — Multi-charger plan**: [`docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md`](../documentation/milestones/02-2026-02-19-multi-charger-plan.md) — multi-charger support with per-charger prioritization/weighting, to be started after the MVP is released and stable.
 
 ---
 
