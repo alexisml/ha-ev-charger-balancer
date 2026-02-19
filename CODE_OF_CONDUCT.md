@@ -59,7 +59,7 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported by [opening an issue](https://github.com/alexisml/ha-ev-charger-balancer/issues/new)
+reported by [opening an issue](../../issues/new)
 in this repository.
 All complaints will be reviewed and investigated promptly and fairly.
 
