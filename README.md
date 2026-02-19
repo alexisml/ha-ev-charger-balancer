@@ -6,12 +6,6 @@ This project gives Home Assistant users a native, no-helper-required solution to
 
 ---
 
-> 🤖 **AI Disclosure**
->
-> A significant portion of this project — including code, documentation, and design — was developed with the assistance of AI tools (GitHub Copilot / large-language models). All AI-generated output has been reviewed, but users and contributors should audit the code independently before relying on it in production environments.
-
----
-
 > ⚠️ **DISCLAIMER — Use at your own risk.**
 >
 > This integration is provided **as-is**, without any warranty of any kind, express or implied. Installing and running this software may affect your EV charger, home electrical circuit, and connected devices. You are solely responsible for any consequences that result from its use.
@@ -180,3 +174,9 @@ Available current pool
 For the full research plan, design decisions, and lessons learned, see:
 - [`docs/development/2026-02-19-research-plan.md`](docs/development/2026-02-19-research-plan.md)
 - [`docs/development/2026-02-19-lessons-learned.md`](docs/development/2026-02-19-lessons-learned.md)
+
+---
+
+> 🤖 **AI Disclosure**
+>
+> A significant portion of this project — including code, documentation, and design — was developed with the assistance of AI tools (GitHub Copilot / large-language models). All AI-generated output has been reviewed, but users and contributors should audit the code independently before relying on it in production environments.
