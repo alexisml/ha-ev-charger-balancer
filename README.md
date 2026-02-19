@@ -16,7 +16,7 @@ This project gives Home Assistant users a native, no-helper-required solution to
 
 ---
 
-> ⚠️ **Current limitation (PR-1):** This integration currently supports **one charger per instance**. Multiple-charger support (water-filling fair distribution) is planned for a future PR. Multiple instances of this integration are not supported — only one config entry can be created. See the [roadmap](docs/development/2026-02-19-research-plan.md) for details.
+> ⚠️ **Current limitation (PR-1):** This integration currently supports **one charger per instance**. Multiple-charger support (water-filling fair distribution) is planned for Phase 2 (post-MVP). Multiple instances of this integration are not supported — only one config entry can be created. See the [MVP plan](docs/development/2026-02-19-mvp-plan.md) for details.
 
 Status: In development — custom integration (PR-2: core entities + device linking complete)
 
@@ -127,7 +127,7 @@ Key rules:
 
 ### Multi-charger fairness — planned feature
 
-> ⚠️ **Not yet implemented.** Multi-charger support is planned for a future PR (PR-5/PR-6). The water-filling algorithm is already unit-tested in `tests/test_load_balancer.py` and will be ported into the integration runtime. Possible future approaches include multiple config entries (one per power meter / site) or a single entry with an options flow to add/remove chargers.
+> ⚠️ **Not yet implemented.** Multi-charger support is planned for Phase 2 (post-MVP). The water-filling algorithm is already unit-tested in `tests/test_load_balancer.py` and will be ported into the integration runtime during Phase 2. Possible future approaches include multiple config entries (one per power meter / site) or a single entry with an options flow to add/remove chargers.
 
 When multiple chargers are active the available current will be distributed fairly using a water-filling algorithm:
 
@@ -156,6 +156,7 @@ Available current pool
 ## Development docs
 
 - All research, plans and design docs for development MUST be placed under `docs/development/` following the filename convention described in [`docs/development/README.md`](docs/development/README.md).
+- See the **MVP plan** (phased roadmap): [`docs/development/2026-02-19-mvp-plan.md`](docs/development/2026-02-19-mvp-plan.md)
 - See the current research plan: [`docs/development/2026-02-19-research-plan.md`](docs/development/2026-02-19-research-plan.md)
 - See the lessons learned (AppDaemon/blueprint evaluation): [`docs/development/2026-02-19-lessons-learned.md`](docs/development/2026-02-19-lessons-learned.md)
 - See development docs README: [`docs/development/README.md`](docs/development/README.md)
@@ -174,6 +175,7 @@ Available current pool
 - For code contributions, open PRs against the repository default branch and reference the relevant docs under `docs/development/`.
 
 For the full research plan, design decisions, and lessons learned, see:
+- [`docs/development/2026-02-19-mvp-plan.md`](docs/development/2026-02-19-mvp-plan.md)
 - [`docs/development/2026-02-19-research-plan.md`](docs/development/2026-02-19-research-plan.md)
 - [`docs/development/2026-02-19-lessons-learned.md`](docs/development/2026-02-19-lessons-learned.md)
 

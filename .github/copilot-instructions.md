@@ -12,7 +12,8 @@ Before making any changes, **always** read and review all `.md` files in the rep
 
 - `README.md` — project overview, status, and quick-start actions
 - `docs/development/README.md` — rules for development documentation
-- `docs/development/2026-02-19-research-plan.md` — implementation roadmap and PR milestones
+- `docs/development/2026-02-19-research-plan.md` — original research and design decisions
+- `docs/development/2026-02-19-mvp-plan.md` — MVP plan: phased implementation roadmap and PR milestones
 - `docs/development/2026-02-19-lessons-learned.md` — design decisions and rationale
 - `docs/development/2026-02-19-testing-guide.md` — how to test the integration
 
@@ -40,7 +41,7 @@ The integration lives in `custom_components/ev_lb/` and follows the standard Hom
 
 ### Current limitations and future plans
 
-- **Single charger only:** The integration currently supports exactly one charger. Multi-charger support (water-filling fair distribution) is planned for PR-5/PR-6.
+- **Single charger only:** The integration currently supports exactly one charger. Multi-charger support (water-filling fair distribution) is planned for Phase 2 (post-MVP) — see [`docs/development/2026-02-19-mvp-plan.md`](../docs/development/2026-02-19-mvp-plan.md).
 - **Single instance only:** Only one config entry can be created (enforced by `async_set_unique_id`). Multiple instances are not supported.
 - **Future multi-charger approach:** Two options are under consideration — multiple config entries (one per power meter/site) or a single entry with an options flow to add/remove chargers. No decision has been made yet; do not implement either until it is scoped in the roadmap.
 

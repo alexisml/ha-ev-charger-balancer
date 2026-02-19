@@ -166,33 +166,11 @@ Limitations of the blueprint approach:
 
 ## Implementation roadmap — Custom HACS integration
 
-The implementation is split into PR-sized milestones so each step can be delivered, reviewed, and merged independently.
-Each milestone is independently testable and must ship with unit tests for the behavior introduced in that PR.
-
-| PR milestone | Scope | Exit criteria |
-|---|---|---|
-| PR-1: Integration scaffold + Config Flow | Create `custom_components/ev_lb/` with `manifest.json`, `__init__.py`, `config_flow.py`, constants, and validation for required inputs (power meter, voltage, service current); add baseline HACS metadata (`hacs.json`) and a GitHub Actions unit-test workflow. | Integration loads in HA; config entry can be created/removed; basic tests for config flow pass; CI runs unit tests on PR/push. |
-| PR-2: Core entities and device linking | Add `sensor.py`, `binary_sensor.py`, `number.py`, `switch.py`; register a charger device entry and attach per-charger entities. | Entities appear under the charger device; unique IDs stable; entity setup tests pass. |
-| PR-3: Single-charger balancing engine | Port `compute_available_current` and `apply_ramp_up_limit` from `tests/` into integration runtime and subscribe to power-meter updates. | On meter change, target current updates correctly with instant down / delayed up behavior; unit tests cover core logic. |
-| PR-4: Action execution contract | Implement configured `set_current` / `stop_charging` / `start_charging` service calls with payload validation and error handling. | Correct service calls are fired for increase/reduce/stop/resume transitions; integration tests assert payloads and unit tests cover payload validation/error paths. |
-| PR-5: Multi-charger fairness | Port `distribute_current` logic for multi-charger allocation. | Current is allocated fairly across active chargers and respects per-charger min/max constraints; fairness tests pass. |
-| PR-6: Runtime charger management | Add options flow for adding/removing chargers at runtime. | Chargers can be added/removed without restart and entities/device links remain consistent; options-flow unit tests pass. |
-| PR-7: Manual override + observability | Expose `ev_lb.set_limit` service and add/verify diagnostic state updates needed for troubleshooting. | Manual override changes runtime limits safely and state reflects changes without restart; unit tests cover limit and state transitions. |
-| PR-8: Test stabilization + HACS release readiness | Finalize HACS requirements (`manifest.json`, `hacs.json`, repository structure/docs), complete integration tests (`pytest-homeassistant-custom-component`), and prepare first release. | CI is green on 3 consecutive runs, installation via HACS works, and docs cover configuration + troubleshooting. |
-
-### Global quality gates (apply to every milestone PR)
-
-- Add/update unit tests for every behavior introduced in that milestone.
-- Keep the unit-test CI workflow green on every PR before merge.
-- Include a short "how to test" section in each PR description (local `pytest` command + HA smoke check for the changed behavior).
-
-### Review-and-update loop (required after every milestone)
-
-After each PR milestone is merged:
-1. Review implementation results vs the milestone exit criteria.
-2. Record gaps, risks, and discovered edge cases.
-3. Update this roadmap (scope/order/acceptance criteria) before starting the next PR.
-4. Confirm test strategy updates needed for the next milestone.
+> The implementation roadmap has been moved to the dedicated **MVP plan** document: [`2026-02-19-mvp-plan.md`](2026-02-19-mvp-plan.md).
+>
+> The roadmap is split into two phases:
+> - **Phase 1 — MVP** (PR-1 through PR-6-MVP): single-charger integration, action execution, observability, and HACS release.
+> - **Phase 2 — Multi-charger support** (PR-5, PR-6): water-filling fairness algorithm and runtime charger management — to be started after the MVP is released and stable.
 
 ---
 
@@ -256,13 +234,4 @@ Unit tests are **required** for any implementation (integration, AppDaemon app, 
 
 ## Next steps, timeline, deliverables
 
-| Step | PR | Owner | ETA | Deliverable | Status |
-|------|-----|-------|-----|-------------|--------|
-| Scaffold custom integration | PR-1 | alexisml | +2 days | `custom_components/ev_lb/` with Config Flow, `hacs.json`, CI workflow | ✅ Done |
-| Core entities and device linking | PR-2 | alexisml | +4 days | `sensor.py`, `binary_sensor.py`, `number.py`, `switch.py`; charger device entry | ✅ Done |
-| Single-charger balancing engine | PR-3 | alexisml | +6 days | Port computation core + power-meter listener | |
-| Action execution contract | PR-4 | alexisml | +7 days | `set_current` / `stop_charging` / `start_charging` service calls | |
-| Multi-charger fairness | PR-5 | alexisml | +9 days | `distribute_current` water-filling logic | |
-| Runtime charger management | PR-6 | alexisml | +10 days | Options flow for add/remove chargers | |
-| Manual override + observability | PR-7 | alexisml | +11 days | `ev_lb.set_limit` service + diagnostic state | |
-| Test stabilization + HACS release | PR-8 | alexisml | +14 days | Full integration tests, HACS-ready release | |
+> The full timeline and deliverables table has been moved to the **MVP plan**: [`2026-02-19-mvp-plan.md`](2026-02-19-mvp-plan.md).
