@@ -71,4 +71,4 @@ Apply the following rules when reviewing or writing code in this repository.
   - ❌ `"Returns None when available is below charger minimum."` (describes a return value)
   - ✅ `"Charging stops rather than operating at unsafe low current when headroom is insufficient."` (describes what the user observes)
 - Test class docstrings must state which user-facing scenario the class covers.
-- Test names must be self-explanatory: `test_charging_stops_when_overloaded` is preferred over `test_below_min_returns_none`.
+- Test names should be self-explanatory: `test_charging_stops_when_overloaded` is preferred over `test_below_min_returns_none`.
