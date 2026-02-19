@@ -6,16 +6,13 @@ Tests cover:
 - distribute_current: single charger, multi-charger fairness, caps, shutoff,
   disabled state, power sensor unavailable, charger at zero load
 - apply_ramp_up_limit: cooldown enforcement, no-op when decreasing or no prior reduction
+
+The computation functions live in tests/load_balancer_core.py until they are
+ported into the custom integration (custom_components/ev_lb/).
 """
 
-import sys
-import os
-
-# Allow importing apps/ev_lb/ev_lb.py without an AppDaemon installation
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "apps", "ev_lb"))
-
 import pytest
-from ev_lb import (
+from load_balancer_core import (
     VOLTAGE_DEFAULT,
     compute_available_current,
     clamp_current,
