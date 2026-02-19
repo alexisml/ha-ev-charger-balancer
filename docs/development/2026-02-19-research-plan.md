@@ -166,15 +166,25 @@ Limitations of the blueprint approach:
 
 ## Implementation roadmap — Custom HACS integration
 
-1. Scaffold `custom_components/ev_lb/` with `manifest.json`, `__init__.py`, `config_flow.py`.
-2. Add `sensor.py`, `binary_sensor.py`, `number.py`, `switch.py`.
-3. Register entities at setup; link to a device entry per charger.
-4. Subscribe to power meter sensor state changes.
-5. Port computation core (`compute_available_current`, `distribute_current`, `apply_ramp_up_limit`) from `tests/` into the integration.
-6. Call configured `set_current` / `stop_charging` / `start_charging` services.
-7. Expose `ev_lb.set_limit` service for manual override.
-8. Write HA integration tests using `pytest-homeassistant-custom-component`.
-9. Publish via HACS.
+The implementation is split into PR-sized milestones so each step can be delivered, reviewed, and merged independently.
+
+| PR milestone | Scope | Exit criteria |
+|---|---|---|
+| PR-1: Integration scaffold + Config Flow | Create `custom_components/ev_lb/` with `manifest.json`, `__init__.py`, `config_flow.py`, constants, and validation for required inputs (power meter, voltage, service current). | Integration loads in HA; config entry can be created/removed; basic tests for config flow pass. |
+| PR-2: Core entities and device linking | Add `sensor.py`, `binary_sensor.py`, `number.py`, `switch.py`; register a charger device entry and attach per-charger entities. | Entities appear under the charger device; unique IDs stable; entity setup tests pass. |
+| PR-3: Single-charger balancing engine | Port `compute_available_current` and `apply_ramp_up_limit` from `tests/` into integration runtime and subscribe to power-meter updates. | On meter change, target current updates correctly with instant down / delayed up behavior; unit tests cover core logic. |
+| PR-4: Action execution contract | Implement configured `set_current` / `stop_charging` / `start_charging` service calls with payload validation and error handling. | Correct service calls are fired for increase/reduce/stop/resume transitions; integration tests assert payloads. |
+| PR-5: Multi-charger fairness | Port `distribute_current` logic and add options flow for adding/removing chargers at runtime. | Current is allocated fairly across active chargers and respects per-charger min/max constraints; fairness tests pass. |
+| PR-6: Manual override + observability | Expose `ev_lb.set_limit` service and add/verify diagnostic state updates needed for troubleshooting. | Manual override changes runtime limits safely and state reflects changes without restart. |
+| PR-7: Release readiness (HACS) | Finalize HACS metadata/docs, stabilize tests (`pytest-homeassistant-custom-component`), and prepare first release. | CI is green, installation via HACS works, and docs cover configuration + troubleshooting. |
+
+### Review-and-update loop (required after every milestone)
+
+After each PR milestone is merged:
+1. Review implementation results vs the milestone exit criteria.
+2. Record gaps, risks, and discovered edge cases.
+3. Update this roadmap (scope/order/acceptance criteria) before starting the next PR.
+4. Confirm test strategy updates needed for the next milestone.
 
 ---
 
