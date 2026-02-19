@@ -26,6 +26,10 @@ DEFAULT_VOLTAGE = 230.0
 DEFAULT_MAX_SERVICE_CURRENT = 32.0
 DEFAULT_MAX_CHARGER_CURRENT = 32.0
 DEFAULT_MIN_EV_CURRENT = 6.0
+DEFAULT_RAMP_UP_TIME = 30.0  # Seconds — cooldown before allowing current increase
+
+# Dispatcher signal template — format with entry_id
+SIGNAL_UPDATE_FMT = f"{DOMAIN}_update_{{entry_id}}"
 
 # Validation limits
 MIN_VOLTAGE = 100.0
