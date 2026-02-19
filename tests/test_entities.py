@@ -325,6 +325,7 @@ class TestSwitchEntity:
         entity_id = ent_reg.async_get_entity_id(
             "switch", DOMAIN, f"{mock_config_entry.entry_id}_enabled"
         )
+        assert entity_id is not None
         await hass.services.async_call(
             "switch", "turn_off", {"entity_id": entity_id}, blocking=True,
         )
@@ -346,7 +347,7 @@ class TestUnload:
     async def test_entities_removed_on_unload(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """All entities are removed when the config entry is unloaded."""
+        """All entity states become unavailable when the config entry is unloaded."""
         await _setup_entry(hass, mock_config_entry)
 
         ent_reg = er.async_get(hass)
@@ -358,3 +359,8 @@ class TestUnload:
         await hass.config_entries.async_unload(mock_config_entry.entry_id)
         await hass.async_block_till_done()
         assert mock_config_entry.state is ConfigEntryState.NOT_LOADED
+
+        # After unload, entity states should be unavailable
+        for entity_entry in entries_before:
+            state = hass.states.get(entity_entry.entity_id)
+            assert state is None or state.state == "unavailable"

@@ -8,10 +8,10 @@ from homeassistant.components.binary_sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import DOMAIN
+from .const import get_device_info
 
 
 async def async_setup_entry(
@@ -23,7 +23,7 @@ async def async_setup_entry(
     async_add_entities([EvLbActiveBinarySensor(entry)])
 
 
-class EvLbActiveBinarySensor(BinarySensorEntity):
+class EvLbActiveBinarySensor(BinarySensorEntity, RestoreEntity):
     """Binary sensor indicating whether load balancing is actively controlling the charger."""
 
     _attr_has_entity_name = True
@@ -34,10 +34,11 @@ class EvLbActiveBinarySensor(BinarySensorEntity):
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialise the binary sensor."""
         self._attr_unique_id = f"{entry.entry_id}_active"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="EV Charger Load Balancer",
-            manufacturer="ev_lb",
-            model="Virtual Load Balancer",
-            entry_type=None,
-        )
+        self._attr_device_info = get_device_info(entry)
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last known value on startup."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last and last.state is not None:
+            self._attr_is_on = last.state == "on"

@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.number import NumberMode, RestoreNumber
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfElectricCurrent
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
     DEFAULT_MAX_CHARGER_CURRENT,
     DEFAULT_MIN_EV_CURRENT,
-    DOMAIN,
     MAX_CHARGER_CURRENT,
     MIN_CHARGER_CURRENT,
     MIN_EV_CURRENT_MAX,
     MIN_EV_CURRENT_MIN,
+    get_device_info,
 )
 
 
@@ -34,7 +33,7 @@ async def async_setup_entry(
     )
 
 
-class EvLbMaxChargerCurrentNumber(NumberEntity):
+class EvLbMaxChargerCurrentNumber(RestoreNumber):
     """Number entity for the per-charger maximum charging current (A)."""
 
     _attr_has_entity_name = True
@@ -49,13 +48,14 @@ class EvLbMaxChargerCurrentNumber(NumberEntity):
         """Initialise the number entity."""
         self._attr_unique_id = f"{entry.entry_id}_max_charger_current"
         self._attr_native_value = DEFAULT_MAX_CHARGER_CURRENT
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="EV Charger Load Balancer",
-            manufacturer="ev_lb",
-            model="Virtual Load Balancer",
-            entry_type=None,
-        )
+        self._attr_device_info = get_device_info(entry)
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last known value on startup."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_number_data()
+        if last and last.native_value is not None:
+            self._attr_native_value = last.native_value
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
@@ -63,7 +63,7 @@ class EvLbMaxChargerCurrentNumber(NumberEntity):
         self.async_write_ha_state()
 
 
-class EvLbMinEvCurrentNumber(NumberEntity):
+class EvLbMinEvCurrentNumber(RestoreNumber):
     """Number entity for the minimum EV current before shutdown (A)."""
 
     _attr_has_entity_name = True
@@ -78,13 +78,14 @@ class EvLbMinEvCurrentNumber(NumberEntity):
         """Initialise the number entity."""
         self._attr_unique_id = f"{entry.entry_id}_min_ev_current"
         self._attr_native_value = DEFAULT_MIN_EV_CURRENT
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="EV Charger Load Balancer",
-            manufacturer="ev_lb",
-            model="Virtual Load Balancer",
-            entry_type=None,
-        )
+        self._attr_device_info = get_device_info(entry)
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last known value on startup."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_number_data()
+        if last and last.native_value is not None:
+            self._attr_native_value = last.native_value
 
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""

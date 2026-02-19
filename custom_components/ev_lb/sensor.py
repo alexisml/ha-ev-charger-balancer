@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
-    SensorEntity,
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfElectricCurrent
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, get_device_info
 
 
 async def async_setup_entry(
@@ -30,7 +29,7 @@ async def async_setup_entry(
     )
 
 
-class EvLbCurrentSetSensor(SensorEntity):
+class EvLbCurrentSetSensor(RestoreSensor):
     """Sensor showing the last requested charging current (A)."""
 
     _attr_has_entity_name = True
@@ -43,16 +42,17 @@ class EvLbCurrentSetSensor(SensorEntity):
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialise the sensor."""
         self._attr_unique_id = f"{entry.entry_id}_current_set"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="EV Charger Load Balancer",
-            manufacturer="ev_lb",
-            model="Virtual Load Balancer",
-            entry_type=None,
-        )
+        self._attr_device_info = get_device_info(entry)
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last known value on startup."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_sensor_data()
+        if last and last.native_value is not None:
+            self._attr_native_value = last.native_value
 
 
-class EvLbAvailableCurrentSensor(SensorEntity):
+class EvLbAvailableCurrentSensor(RestoreSensor):
     """Sensor showing the computed available current headroom (A)."""
 
     _attr_has_entity_name = True
@@ -65,10 +65,11 @@ class EvLbAvailableCurrentSensor(SensorEntity):
     def __init__(self, entry: ConfigEntry) -> None:
         """Initialise the sensor."""
         self._attr_unique_id = f"{entry.entry_id}_available_current"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="EV Charger Load Balancer",
-            manufacturer="ev_lb",
-            model="Virtual Load Balancer",
-            entry_type=None,
-        )
+        self._attr_device_info = get_device_info(entry)
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last known value on startup."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_sensor_data()
+        if last and last.native_value is not None:
+            self._attr_native_value = last.native_value
