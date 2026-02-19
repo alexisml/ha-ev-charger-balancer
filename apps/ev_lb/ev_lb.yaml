@@ -1,0 +1,44 @@
+ev_charger_load_balancer:
+  module: ev_lb
+  class: EVChargerLoadBalancer
+
+  # --- Power meter ---
+  # Entity ID of the sensor reporting total household power (Watts).
+  power_sensor: sensor.house_power_w
+
+  # Nominal supply voltage in Volts (default: 230).
+  voltage_v: 230
+
+  # --- Service limits (HA input_number helpers) ---
+  # Whole-house breaker / service rating in Amps.
+  max_service_current_input: input_number.ev_lb_max_service_current_a
+
+  # Minimum current below which charging is stopped instead of throttled.
+  # Default: 6 A (IEC 61851 minimum for AC charging).
+  min_current_input: input_number.ev_lb_min_current_before_shutdown_a
+
+  # Global enable / disable toggle.
+  enabled_input: input_boolean.ev_lb_enabled
+
+  # --- Chargers ---
+  # Add one entry per managed EV charger.
+  chargers:
+    - id: charger_1
+      # HA input_number entity holding this charger's max current (Amps).
+      max_charging_current_input: input_number.ev_lb_max_charging_current_a_charger_1
+      # Script / service called to set the charger's target current.
+      # Payload: { charger_id: "<id>", current_a: <float> }
+      set_current_service: script.ev_lb_set_current_charger_1
+      # Optional: script / service to stop charging.
+      # Payload: { charger_id: "<id>" }
+      stop_charging_service: script.ev_lb_stop_charging_charger_1
+      # Optional: script / service to start (resume) charging.
+      # Payload: { charger_id: "<id>" }
+      start_charging_service: script.ev_lb_start_charging_charger_1
+
+    # Uncomment and duplicate this block to add a second charger:
+    # - id: charger_2
+    #   max_charging_current_input: input_number.ev_lb_max_charging_current_a_charger_2
+    #   set_current_service: script.ev_lb_set_current_charger_2
+    #   stop_charging_service: script.ev_lb_stop_charging_charger_2
+    #   start_charging_service: script.ev_lb_start_charging_charger_2
