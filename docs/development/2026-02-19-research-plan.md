@@ -174,9 +174,10 @@ The implementation is split into PR-sized milestones so each step can be deliver
 | PR-2: Core entities and device linking | Add `sensor.py`, `binary_sensor.py`, `number.py`, `switch.py`; register a charger device entry and attach per-charger entities. | Entities appear under the charger device; unique IDs stable; entity setup tests pass. |
 | PR-3: Single-charger balancing engine | Port `compute_available_current` and `apply_ramp_up_limit` from `tests/` into integration runtime and subscribe to power-meter updates. | On meter change, target current updates correctly with instant down / delayed up behavior; unit tests cover core logic. |
 | PR-4: Action execution contract | Implement configured `set_current` / `stop_charging` / `start_charging` service calls with payload validation and error handling. | Correct service calls are fired for increase/reduce/stop/resume transitions; integration tests assert payloads. |
-| PR-5: Multi-charger fairness | Port `distribute_current` logic and add options flow for adding/removing chargers at runtime. | Current is allocated fairly across active chargers and respects per-charger min/max constraints; fairness tests pass. |
-| PR-6: Manual override + observability | Expose `ev_lb.set_limit` service and add/verify diagnostic state updates needed for troubleshooting. | Manual override changes runtime limits safely and state reflects changes without restart. |
-| PR-7: Release readiness (HACS) | Finalize HACS metadata/docs, stabilize tests (`pytest-homeassistant-custom-component`), and prepare first release. | CI is green, installation via HACS works, and docs cover configuration + troubleshooting. |
+| PR-5: Multi-charger fairness | Port `distribute_current` logic for multi-charger allocation. | Current is allocated fairly across active chargers and respects per-charger min/max constraints; fairness tests pass. |
+| PR-6: Runtime charger management | Add options flow for adding/removing chargers at runtime. | Chargers can be added/removed without restart and entities/device links remain consistent. |
+| PR-7: Manual override + observability | Expose `ev_lb.set_limit` service and add/verify diagnostic state updates needed for troubleshooting. | Manual override changes runtime limits safely and state reflects changes without restart. |
+| PR-8: Test stabilization + HACS release readiness | Finalize HACS metadata/docs, complete integration tests (`pytest-homeassistant-custom-component`), and prepare first release. | CI is green on 3 consecutive runs, installation via HACS works, and docs cover configuration + troubleshooting. |
 
 ### Review-and-update loop (required after every milestone)
 
