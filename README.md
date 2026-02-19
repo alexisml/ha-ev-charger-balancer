@@ -127,7 +127,7 @@ Key rules:
 
 ### Multi-charger fairness — planned feature
 
-> ⚠️ **Not yet implemented.** Multi-charger support with per-charger prioritization/weighting is planned for Phase 2 (post-MVP). See [`docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md`](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md) for the Phase 2 plan. The water-filling algorithm already unit-tested in `tests/test_load_balancer.py` will feed into that work.
+> ⚠️ **Not yet implemented.** Multi-charger support with per-charger prioritization/weighting is planned for Phase 2 (post-MVP). See [`docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md`](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md) for the Phase 2 plan. The water-filling algorithm is already unit-tested in `tests/test_load_balancer.py` and will feed into that work.
 
 When multiple chargers are active the available current will be distributed fairly using a water-filling algorithm:
 
