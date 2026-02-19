@@ -60,8 +60,13 @@ representative at an online or offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported by [opening an issue](../../issues/new)
-in this repository.
-All complaints will be reviewed and investigated promptly and fairly.
+in this repository. Please note that GitHub issues are public; do not include
+sensitive or identifying information about yourself or others in the issue
+description. If you require a private reporting channel, you may briefly state
+this in the issue (for example, "I would like to report a Code of Conduct
+incident privately"), and a community leader will contact you to arrange a
+confidential discussion. All complaints will be reviewed and investigated
+promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
