@@ -12,7 +12,7 @@ from homeassistant.const import UnitOfElectricCurrent
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, get_device_info
+from .const import get_device_info
 
 
 async def async_setup_entry(
