@@ -4,7 +4,7 @@ A custom Home Assistant integration (HACS) that provides dynamic load balancing 
 
 This project gives Home Assistant users a native, no-helper-required solution to limit and distribute charging current to one or more EV chargers based on a whole-home power meter, household limits, and user preferences.
 
-Status: Planning — custom integration
+Status: In development — custom integration (PR-1: scaffold + Config Flow complete)
 
 ## Why a custom integration?
 
@@ -146,7 +146,7 @@ Available current pool
 
 ## Quick start / Next actions
 
-1. Scaffold `custom_components/ev_lb/` with `manifest.json`, `__init__.py`, `config_flow.py`.
+1. ~~Scaffold `custom_components/ev_lb/` with `manifest.json`, `__init__.py`, `config_flow.py`.~~ ✅ Done (PR-1)
 2. Add `sensor.py`, `binary_sensor.py`, `number.py`, `switch.py`.
 3. Port the computation core from `tests/` into the integration.
 4. Write HA integration tests using `pytest-homeassistant-custom-component`.

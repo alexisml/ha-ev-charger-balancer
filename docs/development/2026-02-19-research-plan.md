@@ -256,11 +256,11 @@ Unit tests are **required** for any implementation (integration, AppDaemon app, 
 
 ## Next steps, timeline, deliverables
 
-| Step | Owner | ETA | Deliverable |
-|------|-------|-----|-------------|
-| Scaffold custom integration | alexisml | +2 days | `custom_components/ev_lb/` with Config Flow |
-| Register entities and device entry | alexisml | +4 days | Sensor, binary sensor, number, switch entities |
-| Port computation core + power-meter listener | alexisml | +6 days | Working integration (single charger) |
-| Multi-charger support via options flow | alexisml | +9 days | Add/remove chargers at runtime |
-| Integration tests (`pytest-homeassistant-custom-component`) | alexisml | +11 days | Full test suite |
-| HACS manifest, README, release | alexisml | +14 days | Publishable HACS repo |
+| Step | Owner | ETA | Deliverable | Status |
+|------|-------|-----|-------------|--------|
+| Scaffold custom integration | alexisml | +2 days | `custom_components/ev_lb/` with Config Flow | ✅ Done (PR-1) |
+| Register entities and device entry | alexisml | +4 days | Sensor, binary sensor, number, switch entities | |
+| Port computation core + power-meter listener | alexisml | +6 days | Working integration (single charger) | |
+| Multi-charger support via options flow | alexisml | +9 days | Add/remove chargers at runtime | |
+| Integration tests (`pytest-homeassistant-custom-component`) | alexisml | +11 days | Full test suite | |
+| HACS manifest, README, release | alexisml | +14 days | Publishable HACS repo | |
