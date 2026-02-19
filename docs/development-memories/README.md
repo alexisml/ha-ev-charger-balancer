@@ -1,11 +1,13 @@
-# Development docs — repository rule
+# Development memories — repository rule
 
 This directory stores development-focused documents: research plans, design notes, prototypes, architecture choices, and meeting outcomes.
 
 ## Rule (required)
 
 - Every new plan, research note, design doc or similar development artifact MUST be added under this directory with a filename that begins with the ISO date of creation in the format:
-  - `docs/development/<YYYY-MM-DD>-<short-descriptive-file-name>.md`
+  - `docs/development-memories/<YYYY-MM-DD>-<short-descriptive-file-name>.md`
+- Milestone documents (MVP plan, release plans, etc.) go under `docs/documentation/milestones/` with a numeric prefix:
+  - `docs/documentation/milestones/<NN>-<YYYY-MM-DD>-<short-name>.md`
 
 ## Why
 
@@ -16,9 +18,10 @@ This directory stores development-focused documents: research plans, design note
 
 - Use lowercase, hyphen-separated descriptive names.
 - Examples:
-  - `docs/development/2026-02-19-research-plan.md`
-  - `docs/development/2026-02-19-prototype-notes.md`
-  - `docs/development/2026-03-01-integration-design.md`
+  - `docs/development-memories/2026-02-19-research-plan.md`
+  - `docs/development-memories/2026-02-19-prototype-notes.md`
+  - `docs/development-memories/2026-03-01-integration-design.md`
+  - `docs/documentation/milestones/01-2026-02-19-mvp-plan.md`
 
 ## Template header for new docs
 
@@ -34,11 +37,12 @@ Summary: One-line summary of this document
 <document body>
 ```
 
-## When to use docs/prd vs docs/development
+## When to use docs/prd vs docs/development-memories
 
-- `docs/development/` is the default place for research and development artifacts.
+- `docs/development-memories/` is the default place for research and development artifacts.
+- Milestone and release plans go under `docs/documentation/milestones/`.
 - If you create formal product requirement documents (PRDs) that should be distinguished from development notes, consider placing them under `docs/prd/`.
-- This repository defaults to `docs/development/`. If maintainers prefer a different policy (e.g., `docs/prd/` for PRDs), open an issue to formalize the naming and update this README.
+- This repository defaults to `docs/development-memories/`. If maintainers prefer a different policy (e.g., `docs/prd/` for PRDs), open an issue to formalize the naming and update this README.
 
 ## How to add a document
 
