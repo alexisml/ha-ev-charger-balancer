@@ -8,7 +8,7 @@ Summary: Plan and design notes to determine the best delivery mechanism for EV c
 
 ---
 
-This document collects the research plan, proposed README content, the blueprint discussion, the requested entity/input model, and next steps. It follows the repository rule that development docs live under `docs/development/<file>.md`.
+This document collects the research plan, proposed README content, the blueprint discussion, the requested entity/input model, and next steps. It follows the repository rule that development docs live under `docs/development-memories/<file>.md`.
 
 ## Contents
 
@@ -166,7 +166,7 @@ Limitations of the blueprint approach:
 
 ## Implementation roadmap — Custom HACS integration
 
-> The implementation roadmap has been moved to the dedicated **MVP plan** document: [`2026-02-19-mvp-plan.md`](2026-02-19-mvp-plan.md).
+> The implementation roadmap has been moved to the dedicated **MVP plan** document: [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](../documentation/milestones/01-2026-02-19-mvp-plan.md).
 >
 > The roadmap is split into two phases:
 > - **Phase 1 — MVP** (PR-1 through PR-6-MVP): single-charger integration, action execution, observability, and HACS release.
@@ -234,4 +234,4 @@ Unit tests are **required** for any implementation (integration, AppDaemon app, 
 
 ## Next steps, timeline, deliverables
 
-> The full timeline and deliverables table has been moved to the **MVP plan**: [`2026-02-19-mvp-plan.md`](2026-02-19-mvp-plan.md).
+> The full timeline and deliverables table has been moved to the **MVP plan**: [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](../documentation/milestones/01-2026-02-19-mvp-plan.md).

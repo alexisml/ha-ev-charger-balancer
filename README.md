@@ -16,7 +16,7 @@ This project gives Home Assistant users a native, no-helper-required solution to
 
 ---
 
-> ⚠️ **Current limitation (PR-1):** This integration currently supports **one charger per instance**. Multiple-charger support (water-filling fair distribution) is planned for Phase 2 (post-MVP). Multiple instances of this integration are not supported — only one config entry can be created. See the [MVP plan](docs/development/2026-02-19-mvp-plan.md) for details.
+> ⚠️ **Current limitation (PR-1):** This integration currently supports **one charger per instance**. Multiple-charger support (water-filling fair distribution) is planned for Phase 2 (post-MVP). Multiple instances of this integration are not supported — only one config entry can be created. See the [MVP plan](docs/documentation/milestones/01-2026-02-19-mvp-plan.md) for details.
 
 Status: In development — custom integration (PR-2: core entities + device linking complete)
 
@@ -32,7 +32,7 @@ A **custom HACS integration with Config Flow** solves this:
 - **Multi-charger support** *(planned)* — future options flow will handle adding/removing chargers at runtime; currently one charger per instance only.
 - **HACS distribution** — install via HACS, configure in the UI, no YAML required.
 
-See [`docs/development/2026-02-19-lessons-learned.md`](docs/development/2026-02-19-lessons-learned.md) for the full evaluation.
+See [`docs/development-memories/2026-02-19-lessons-learned.md`](docs/development-memories/2026-02-19-lessons-learned.md) for the full evaluation.
 
 ## How it works
 
@@ -155,11 +155,11 @@ Available current pool
 
 ## Development docs
 
-- All research, plans and design docs for development MUST be placed under `docs/development/` following the filename convention described in [`docs/development/README.md`](docs/development/README.md).
-- See the **MVP plan** (phased roadmap): [`docs/development/2026-02-19-mvp-plan.md`](docs/development/2026-02-19-mvp-plan.md)
-- See the current research plan: [`docs/development/2026-02-19-research-plan.md`](docs/development/2026-02-19-research-plan.md)
-- See the lessons learned (AppDaemon/blueprint evaluation): [`docs/development/2026-02-19-lessons-learned.md`](docs/development/2026-02-19-lessons-learned.md)
-- See development docs README: [`docs/development/README.md`](docs/development/README.md)
+- All research, plans and design docs for development MUST be placed under `docs/development-memories/` following the filename convention described in [`docs/development-memories/README.md`](docs/development-memories/README.md).
+- See the **MVP plan** (phased roadmap): [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](docs/documentation/milestones/01-2026-02-19-mvp-plan.md)
+- See the current research plan: [`docs/development-memories/2026-02-19-research-plan.md`](docs/development-memories/2026-02-19-research-plan.md)
+- See the lessons learned (AppDaemon/blueprint evaluation): [`docs/development-memories/2026-02-19-lessons-learned.md`](docs/development-memories/2026-02-19-lessons-learned.md)
+- See development docs README: [`docs/development-memories/README.md`](docs/development-memories/README.md)
 
 ## Quick start / Next actions
 
@@ -172,12 +172,12 @@ Available current pool
 ## Contributing (short tip)
 
 - When adding plans or design docs, follow the docs rule above.
-- For code contributions, open PRs against the repository default branch and reference the relevant docs under `docs/development/`.
+- For code contributions, open PRs against the repository default branch and reference the relevant docs under `docs/development-memories/`.
 
 For the full research plan, design decisions, and lessons learned, see:
-- [`docs/development/2026-02-19-mvp-plan.md`](docs/development/2026-02-19-mvp-plan.md)
-- [`docs/development/2026-02-19-research-plan.md`](docs/development/2026-02-19-research-plan.md)
-- [`docs/development/2026-02-19-lessons-learned.md`](docs/development/2026-02-19-lessons-learned.md)
+- [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](docs/documentation/milestones/01-2026-02-19-mvp-plan.md)
+- [`docs/development-memories/2026-02-19-research-plan.md`](docs/development-memories/2026-02-19-research-plan.md)
+- [`docs/development-memories/2026-02-19-lessons-learned.md`](docs/development-memories/2026-02-19-lessons-learned.md)
 
 ---
 
