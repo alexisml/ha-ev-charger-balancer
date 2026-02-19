@@ -166,15 +166,33 @@ Limitations of the blueprint approach:
 
 ## Implementation roadmap — Custom HACS integration
 
-1. Scaffold `custom_components/ev_lb/` with `manifest.json`, `__init__.py`, `config_flow.py`.
-2. Add `sensor.py`, `binary_sensor.py`, `number.py`, `switch.py`.
-3. Register entities at setup; link to a device entry per charger.
-4. Subscribe to power meter sensor state changes.
-5. Port computation core (`compute_available_current`, `distribute_current`, `apply_ramp_up_limit`) from `tests/` into the integration.
-6. Call configured `set_current` / `stop_charging` / `start_charging` services.
-7. Expose `ev_lb.set_limit` service for manual override.
-8. Write HA integration tests using `pytest-homeassistant-custom-component`.
-9. Publish via HACS.
+The implementation is split into PR-sized milestones so each step can be delivered, reviewed, and merged independently.
+Each milestone is independently testable and must ship with unit tests for the behavior introduced in that PR.
+
+| PR milestone | Scope | Exit criteria |
+|---|---|---|
+| PR-1: Integration scaffold + Config Flow | Create `custom_components/ev_lb/` with `manifest.json`, `__init__.py`, `config_flow.py`, constants, and validation for required inputs (power meter, voltage, service current); add baseline HACS metadata (`hacs.json`) and a GitHub Actions unit-test workflow. | Integration loads in HA; config entry can be created/removed; basic tests for config flow pass; CI runs unit tests on PR/push. |
+| PR-2: Core entities and device linking | Add `sensor.py`, `binary_sensor.py`, `number.py`, `switch.py`; register a charger device entry and attach per-charger entities. | Entities appear under the charger device; unique IDs stable; entity setup tests pass. |
+| PR-3: Single-charger balancing engine | Port `compute_available_current` and `apply_ramp_up_limit` from `tests/` into integration runtime and subscribe to power-meter updates. | On meter change, target current updates correctly with instant down / delayed up behavior; unit tests cover core logic. |
+| PR-4: Action execution contract | Implement configured `set_current` / `stop_charging` / `start_charging` service calls with payload validation and error handling. | Correct service calls are fired for increase/reduce/stop/resume transitions; integration tests assert payloads and unit tests cover payload validation/error paths. |
+| PR-5: Multi-charger fairness | Port `distribute_current` logic for multi-charger allocation. | Current is allocated fairly across active chargers and respects per-charger min/max constraints; fairness tests pass. |
+| PR-6: Runtime charger management | Add options flow for adding/removing chargers at runtime. | Chargers can be added/removed without restart and entities/device links remain consistent; options-flow unit tests pass. |
+| PR-7: Manual override + observability | Expose `ev_lb.set_limit` service and add/verify diagnostic state updates needed for troubleshooting. | Manual override changes runtime limits safely and state reflects changes without restart; unit tests cover limit and state transitions. |
+| PR-8: Test stabilization + HACS release readiness | Finalize HACS requirements (`manifest.json`, `hacs.json`, repository structure/docs), complete integration tests (`pytest-homeassistant-custom-component`), and prepare first release. | CI is green on 3 consecutive runs, installation via HACS works, and docs cover configuration + troubleshooting. |
+
+### Global quality gates (apply to every milestone PR)
+
+- Add/update unit tests for every behavior introduced in that milestone.
+- Keep the unit-test CI workflow green on every PR before merge.
+- Include a short "how to test" section in each PR description (local `pytest` command + HA smoke check for the changed behavior).
+
+### Review-and-update loop (required after every milestone)
+
+After each PR milestone is merged:
+1. Review implementation results vs the milestone exit criteria.
+2. Record gaps, risks, and discovered edge cases.
+3. Update this roadmap (scope/order/acceptance criteria) before starting the next PR.
+4. Confirm test strategy updates needed for the next milestone.
 
 ---
 
