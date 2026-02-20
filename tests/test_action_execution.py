@@ -103,14 +103,14 @@ def _get_entity_id(
 
 
 class TestSetCurrentAction:
-    """Verify set_current action fires when the charger current changes."""
+    """Charger receives the correct current target when load conditions change."""
 
     async def test_set_current_fires_on_initial_charge(
         self,
         hass: HomeAssistant,
         mock_config_entry_with_actions: MockConfigEntry,
     ) -> None:
-        """set_current and start_charging fire when charging starts from zero."""
+        """Charging starts when sufficient headroom becomes available from a stopped state."""
         calls = async_mock_service(hass, "script", "turn_on")
         await _setup(hass, mock_config_entry_with_actions)
 
@@ -133,7 +133,7 @@ class TestSetCurrentAction:
         hass: HomeAssistant,
         mock_config_entry_with_actions: MockConfigEntry,
     ) -> None:
-        """set_current fires when the charger current changes while already active."""
+        """Charger current adjusts dynamically when household load changes during active charging."""
         calls = async_mock_service(hass, "script", "turn_on")
         await _setup(hass, mock_config_entry_with_actions)
 
@@ -158,7 +158,7 @@ class TestSetCurrentAction:
         hass: HomeAssistant,
         mock_config_entry_with_actions: MockConfigEntry,
     ) -> None:
-        """The set_current payload includes current_a as a float and charger_id as a string."""
+        """Charger receives the target current as a numeric value and its identifier as text."""
         calls = async_mock_service(hass, "script", "turn_on")
         await _setup(hass, mock_config_entry_with_actions)
 
@@ -182,14 +182,14 @@ class TestSetCurrentAction:
 
 
 class TestStopChargingAction:
-    """Verify stop_charging action fires when charging must stop."""
+    """Charger stops when household load exceeds safe limits."""
 
     async def test_stop_charging_fires_on_overload(
         self,
         hass: HomeAssistant,
         mock_config_entry_with_actions: MockConfigEntry,
     ) -> None:
-        """stop_charging fires when headroom drops below minimum EV current."""
+        """Charging stops when an overload leaves insufficient headroom for even the minimum current."""
         calls = async_mock_service(hass, "script", "turn_on")
         await _setup(hass, mock_config_entry_with_actions)
 
@@ -217,7 +217,7 @@ class TestStopChargingAction:
         hass: HomeAssistant,
         mock_config_entry_with_actions: MockConfigEntry,
     ) -> None:
-        """stop_charging fires when meter becomes unavailable (default stop mode)."""
+        """Charging stops when the power meter becomes unavailable to protect the circuit."""
         calls = async_mock_service(hass, "script", "turn_on")
         await _setup(hass, mock_config_entry_with_actions)
 
@@ -243,14 +243,14 @@ class TestStopChargingAction:
 
 
 class TestResumeChargingActions:
-    """Verify start_charging and set_current fire in order when charging resumes."""
+    """Charger resumes with the correct current after recovering from a stopped state."""
 
     async def test_resume_fires_start_then_set_current(
         self,
         hass: HomeAssistant,
         mock_config_entry_with_actions: MockConfigEntry,
     ) -> None:
-        """When resuming from stopped, start_charging fires before set_current."""
+        """Charging resumes with the target current after recovering from an overload-induced stop."""
         calls = async_mock_service(hass, "script", "turn_on")
         await _setup(hass, mock_config_entry_with_actions)
         coordinator = hass.data[DOMAIN][mock_config_entry_with_actions.entry_id][
@@ -294,14 +294,14 @@ class TestResumeChargingActions:
 
 
 class TestNoActionOnNoChange:
-    """Verify no actions fire when state does not change."""
+    """Charger is left undisturbed when conditions are stable."""
 
     async def test_no_action_when_current_unchanged(
         self,
         hass: HomeAssistant,
         mock_config_entry_with_actions: MockConfigEntry,
     ) -> None:
-        """No action fires when the computed current stays the same."""
+        """Charger is not disturbed when power conditions remain stable."""
         calls = async_mock_service(hass, "script", "turn_on")
         await _setup(hass, mock_config_entry_with_actions)
 
@@ -322,7 +322,7 @@ class TestNoActionOnNoChange:
         hass: HomeAssistant,
         mock_config_entry_with_actions: MockConfigEntry,
     ) -> None:
-        """No action fires when the charger is already stopped and stays stopped."""
+        """Charger remains stopped without repeated commands when overload persists."""
         calls = async_mock_service(hass, "script", "turn_on")
         await _setup(hass, mock_config_entry_with_actions)
 
@@ -345,14 +345,14 @@ class TestNoActionOnNoChange:
 
 
 class TestNoActionsConfigured:
-    """Verify the integration works without action scripts (backward compatibility)."""
+    """Integration computes targets without requiring action scripts (backward compatibility)."""
 
     async def test_no_actions_called_when_not_configured(
         self,
         hass: HomeAssistant,
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
-        """No service calls are made when no action scripts are configured."""
+        """Target current is computed and displayed without sending charger commands when no scripts are configured."""
         calls = async_mock_service(hass, "script", "turn_on")
         await _setup(hass, mock_config_entry_no_actions)
 
@@ -373,7 +373,7 @@ class TestNoActionsConfigured:
 
 
 class TestActionErrorHandling:
-    """Verify the integration handles action script failures gracefully."""
+    """Integration continues operating when a charger action script fails."""
 
     async def test_failed_action_logs_warning_but_continues(
         self,
@@ -381,7 +381,7 @@ class TestActionErrorHandling:
         mock_config_entry_with_actions: MockConfigEntry,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """A failing action script logs a warning but does not crash the integration."""
+        """Integration continues computing and displaying the target current even when the charger script is broken."""
         # Do NOT mock the script service — the call will raise ServiceNotFound
         await _setup(hass, mock_config_entry_with_actions)
 
@@ -405,14 +405,14 @@ class TestActionErrorHandling:
 
 
 class TestOptionsFlow:
-    """Verify action scripts can be changed after initial setup via options flow."""
+    """Charger action configuration can be changed at any time after initial setup."""
 
     async def test_options_flow_updates_action_scripts(
         self,
         hass: HomeAssistant,
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
-        """Actions configured via options flow are used on next reload."""
+        """Updated charger action scripts take effect after saving options."""
         await _setup(hass, mock_config_entry_no_actions)
 
         # Open options flow
