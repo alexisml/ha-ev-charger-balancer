@@ -19,7 +19,7 @@ This project gives Home Assistant users a native, no-helper-required solution to
 
 > ⚠️ **Current limitation (PR-1):** This integration currently supports **one charger per instance**. Multiple-charger support with per-charger prioritization is planned for Phase 2 (post-MVP). Multiple instances of this integration are not supported — only one config entry can be created. See the [MVP plan](docs/documentation/milestones/01-2026-02-19-mvp-plan.md) and the [multi-charger plan](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md) for details.
 
-Status: In development — custom integration (PR-3: single-charger balancing engine complete)
+Status: In development — custom integration (PR-4: action execution contract complete)
 
 ## Why a custom integration?
 
@@ -49,7 +49,7 @@ See [`docs/development-memories/2026-02-19-lessons-learned.md`](docs/development
 | **Ramp-up time** (s) | Cooldown before allowing current to increase after a dynamic reduction (default 30 s) |
 | **Unavailable behavior** | What to do when the power meter is unavailable: **stop** (default), **ignore**, or **set current** |
 | **Fallback current** (A) | Charging current to use in "set current" mode — capped at the charger maximum to prevent exceeding the physical limit |
-| **Actions** | User-supplied scripts: `set_current`, `stop_charging`, `start_charging` |
+| **Actions** | User-supplied scripts: `set_current`, `stop_charging`, `start_charging` — see the [Action Scripts Guide](docs/documentation/action-scripts-guide.md) |
 
 ---
 
@@ -180,8 +180,9 @@ Available current pool
 1. ~~Scaffold `custom_components/ev_lb/` with `manifest.json`, `__init__.py`, `config_flow.py`.~~ ✅ Done (PR-1)
 2. ~~Add `sensor.py`, `binary_sensor.py`, `number.py`, `switch.py`.~~ ✅ Done (PR-2)
 3. ~~Port the computation core from `tests/` into the integration.~~ ✅ Done (PR-3)
-4. Write HA integration tests using `pytest-homeassistant-custom-component`.
-5. Publish via HACS.
+4. ~~Implement `set_current` / `stop_charging` / `start_charging` action execution.~~ ✅ Done (PR-4)
+5. Write HA integration tests using `pytest-homeassistant-custom-component`.
+6. Publish via HACS.
 
 ## Contributing (short tip)
 
