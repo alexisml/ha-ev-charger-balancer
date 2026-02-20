@@ -35,6 +35,10 @@ from .const import (
     DEFAULT_RAMP_UP_TIME,
     DEFAULT_UNAVAILABLE_BEHAVIOR,
     DEFAULT_UNAVAILABLE_FALLBACK_CURRENT,
+    REASON_FALLBACK_UNAVAILABLE,
+    REASON_MANUAL_OVERRIDE,
+    REASON_PARAMETER_CHANGE,
+    REASON_POWER_METER_UPDATE,
     SIGNAL_UPDATE_FMT,
     UNAVAILABLE_BEHAVIOR_IGNORE,
     UNAVAILABLE_BEHAVIOR_SET_CURRENT,
@@ -95,6 +99,7 @@ class EvLoadBalancerCoordinator:
         self.current_set_a: float = 0.0
         self.available_current_a: float = 0.0
         self.active: bool = False
+        self.last_action_reason: str = ""
 
         # Ramp-up cooldown tracking
         self._last_reduction_time: float | None = None
@@ -185,7 +190,28 @@ class EvLoadBalancerCoordinator:
         except (ValueError, TypeError):
             return
 
-        self._recompute(house_power_w)
+        self._recompute(house_power_w, REASON_PARAMETER_CHANGE)
+
+    # ------------------------------------------------------------------
+    # Manual override via ev_lb.set_limit service
+    # ------------------------------------------------------------------
+
+    @callback
+    def manual_set_limit(self, current_a: float) -> None:
+        """Manually set the charger current, bypassing the balancing algorithm.
+
+        The requested current is clamped to the charger's min/max limits.
+        If the clamped value falls below the minimum EV current, charging
+        is stopped (target set to 0 A).  The override is one-shot: the
+        next power-meter event will resume normal automatic balancing.
+        """
+        clamped = clamp_current(
+            current_a,
+            self.max_charger_current,
+            self.min_ev_current,
+        )
+        target = 0.0 if clamped is None else clamped
+        self._update_and_notify(self.available_current_a, target, REASON_MANUAL_OVERRIDE)
 
     # ------------------------------------------------------------------
     # Fallback for unavailable power meter
@@ -233,13 +259,13 @@ class EvLoadBalancerCoordinator:
 
         # Without a valid meter reading, headroom is unknown — report 0 A
         # as available and apply the determined fallback for the charger.
-        self._update_and_notify(0.0, fallback)
+        self._update_and_notify(0.0, fallback, REASON_FALLBACK_UNAVAILABLE)
 
     # ------------------------------------------------------------------
     # Core computation
     # ------------------------------------------------------------------
 
-    def _recompute(self, house_power_w: float) -> None:
+    def _recompute(self, house_power_w: float, reason: str = REASON_POWER_METER_UPDATE) -> None:
         """Run the single-charger balancing algorithm and publish updates."""
         available_a = compute_available_current(
             house_power_w,
@@ -273,14 +299,14 @@ class EvLoadBalancerCoordinator:
             self._last_reduction_time = now
 
         # Update computed state and execute actions
-        self._update_and_notify(round(available_a, 2), final_a)
+        self._update_and_notify(round(available_a, 2), final_a, reason)
 
     # ------------------------------------------------------------------
     # State update, action execution, and entity notification
     # ------------------------------------------------------------------
 
     def _update_and_notify(
-        self, available_a: float, current_a: float
+        self, available_a: float, current_a: float, reason: str = ""
     ) -> None:
         """Update state, fire charger actions for transitions, and notify entities.
 
@@ -294,6 +320,7 @@ class EvLoadBalancerCoordinator:
         self.available_current_a = available_a
         self.current_set_a = current_a
         self.active = current_a > 0
+        self.last_action_reason = reason
 
         # Schedule charger action execution for state transitions
         if self._has_actions():
