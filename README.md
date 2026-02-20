@@ -67,67 +67,36 @@ The balancer is **event-driven** — it does not poll on a timer. A recomputatio
 
 On each trigger, the coordinator runs the following logic:
 
-```
-Power meter changes
-        │
-        ▼
-┌──────────────────────────────────────────┐
-│  Compute available headroom              │
-│                                          │
-│  available_a = service_current_a         │
-│                - house_power_w / voltage_v│
-└──────────────────────────────────────────┘
-        │
-        ▼
-┌──────────────────────────────────────────────────────────┐
-│  target_a = min(current_ev_a + available_a,              │
-│                 max_charger_a)                           │
-│  (floor to 1 A step)                                     │
-└──────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌──────────────────────────────┐
-│  target_a < min_ev_a ?       │──── YES ──▶  stop_charging()  ◀── instant
-└──────────────────────────────┘              (charger OFF)
-        │ NO
-        ▼
-┌─────────────────────────────────┐
-│  target_a < current_a ?         │
-│  (load increased → must reduce) │
-└─────────────────────────────────┘
-        │ YES                         │ NO (load decreased → may increase)
-        ▼                             ▼
-  set_current(target_a)   ┌──────────────────────────────────┐
-  ◀── instant             │  ramp-up cooldown elapsed?       │
-                          │  (time since last reduction       │
-                          │   ≥ ramp_up_time_s)               │
-                          └──────────────────────────────────┘
-                                │ YES                  │ NO
-                                ▼                      ▼
-                          set_current(target_a)   hold current
-                          ◀── allowed              (wait and retry
-                                                    next cycle)
+```mermaid
+flowchart TD
+    A([Power meter changes])
+    A --> B["Compute available headroom<br/>available_a = service_current_a - house_power_w / voltage_v"]
+    B --> C["target_a = min(current_ev_a + available_a, max_charger_a)<br/>floor to 1 A step"]
+    C --> D{"target_a &lt; min_ev_a?"}
+    D -- YES --> E(["stop_charging — instant<br/>charger OFF"])
+    D -- NO --> F{"target_a &lt; current_a?<br/>load increased, must reduce"}
+    F -- "YES — instant" --> G(["set_current(target_a)"])
+    F -- "NO — load decreased" --> H{"ramp-up cooldown elapsed?<br/>time since last reduction ≥ ramp_up_time_s"}
+    H -- "YES — allowed" --> I(["set_current(target_a)"])
+    H -- NO --> J(["hold current<br/>wait and retry next cycle"])
 ```
 
 ---
 
 ### Charger state transitions
 
-```
-         ┌─────────────────────────────────────────────────────────────────┐
-         │                                                                 │
-         │  target_a ≥ min_ev_a  AND  ramp-up elapsed (or first start)    │
-         ▼                                                                 │
-  ┌─────────────┐    target_a < min_ev_a       ┌──────────────────┐       │
-  │   CHARGING  │ ──────────────────────────▶  │   STOPPED        │       │
-  │  (current   │  ◀── instant stop            │  (charger off)   │       │
-  │   = target) │                              └──────────────────┘       │
-  └─────────────┘                                       │                 │
-         ▲                                              │ target_a         │
-         │                                              │ ≥ min_ev_a       │
-         │                                              │ AND              │
-         └──────────────────────────────────────────────┘ ramp-up elapsed ┘
-              start_charging()  then  set_current(target_a)
+```mermaid
+stateDiagram-v2
+    state "CHARGING (current = target_a)" as CHARGING
+    state "STOPPED (charger off)" as STOPPED
+
+    [*] --> STOPPED
+    CHARGING --> STOPPED: target_a < min_ev_a — instant
+    STOPPED --> CHARGING: target_a ≥ min_ev_a AND ramp-up elapsed (or first start)
+
+    note right of STOPPED
+        Resume: start_charging() then set_current(target_a)
+    end note
 ```
 
 Key rules:
