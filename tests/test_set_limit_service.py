@@ -10,10 +10,7 @@ Tests cover:
 - ev_lb.set_limit service is unregistered when all entries are unloaded
 """
 
-import pytest
-from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -21,12 +18,6 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.ev_lb.const import (
-    CONF_ACTION_SET_CURRENT,
-    CONF_ACTION_START_CHARGING,
-    CONF_ACTION_STOP_CHARGING,
-    CONF_MAX_SERVICE_CURRENT,
-    CONF_POWER_METER_ENTITY,
-    CONF_VOLTAGE,
     DOMAIN,
     REASON_FALLBACK_UNAVAILABLE,
     REASON_MANUAL_OVERRIDE,
@@ -34,69 +25,14 @@ from custom_components.ev_lb.const import (
     REASON_POWER_METER_UPDATE,
     SERVICE_SET_LIMIT,
 )
-
-POWER_METER = "sensor.house_power_w"
-SET_CURRENT_SCRIPT = "script.ev_lb_set_current"
-STOP_CHARGING_SCRIPT = "script.ev_lb_stop_charging"
-START_CHARGING_SCRIPT = "script.ev_lb_start_charging"
-
-
-@pytest.fixture(autouse=True)
-def auto_enable_custom_integrations(enable_custom_integrations):
-    """Enable custom integrations in all tests."""
-    yield
-
-
-@pytest.fixture
-def mock_config_entry_with_actions() -> MockConfigEntry:
-    """Create a mock config entry with all three action scripts configured."""
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_POWER_METER_ENTITY: POWER_METER,
-            CONF_VOLTAGE: 230.0,
-            CONF_MAX_SERVICE_CURRENT: 32.0,
-            CONF_ACTION_SET_CURRENT: SET_CURRENT_SCRIPT,
-            CONF_ACTION_STOP_CHARGING: STOP_CHARGING_SCRIPT,
-            CONF_ACTION_START_CHARGING: START_CHARGING_SCRIPT,
-        },
-        title="EV Load Balancing",
-    )
-
-
-@pytest.fixture
-def mock_config_entry_no_actions() -> MockConfigEntry:
-    """Create a mock config entry with no action scripts configured."""
-    return MockConfigEntry(
-        domain=DOMAIN,
-        data={
-            CONF_POWER_METER_ENTITY: POWER_METER,
-            CONF_VOLTAGE: 230.0,
-            CONF_MAX_SERVICE_CURRENT: 32.0,
-        },
-        title="EV Load Balancing",
-    )
-
-
-async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    """Set up the integration and create the power meter sensor."""
-    hass.states.async_set(POWER_METER, "0")
-    entry.add_to_hass(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    assert entry.state is ConfigEntryState.LOADED
-
-
-def _get_entity_id(
-    hass: HomeAssistant, entry: MockConfigEntry, platform: str, suffix: str
-) -> str:
-    """Look up entity_id from the entity registry."""
-    ent_reg = er.async_get(hass)
-    entity_id = ent_reg.async_get_entity_id(
-        platform, DOMAIN, f"{entry.entry_id}_{suffix}"
-    )
-    assert entity_id is not None
-    return entity_id
+from conftest import (
+    POWER_METER,
+    SET_CURRENT_SCRIPT,
+    STOP_CHARGING_SCRIPT,
+    START_CHARGING_SCRIPT,
+    setup_integration,
+    get_entity_id,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +49,7 @@ class TestSetLimitService:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """Charger current changes to the requested value when the user calls set_limit."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
 
         await hass.services.async_call(
             DOMAIN,
@@ -123,7 +59,7 @@ class TestSetLimitService:
         )
         await hass.async_block_till_done()
 
-        current_set_id = _get_entity_id(
+        current_set_id = get_entity_id(
             hass, mock_config_entry_no_actions, "sensor", "current_set"
         )
         assert float(hass.states.get(current_set_id).state) == 16.0
@@ -134,7 +70,7 @@ class TestSetLimitService:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """Charger current is capped at the charger maximum when the user requests a value above it."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
 
         # Default max charger current is 32 A — request 50 A
         await hass.services.async_call(
@@ -145,7 +81,7 @@ class TestSetLimitService:
         )
         await hass.async_block_till_done()
 
-        current_set_id = _get_entity_id(
+        current_set_id = get_entity_id(
             hass, mock_config_entry_no_actions, "sensor", "current_set"
         )
         assert float(hass.states.get(current_set_id).state) == 32.0
@@ -156,7 +92,7 @@ class TestSetLimitService:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """Charging stops when the user requests a current below the minimum EV threshold."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
 
         # Start charging first
         hass.states.async_set(POWER_METER, "3000")
@@ -171,12 +107,12 @@ class TestSetLimitService:
         )
         await hass.async_block_till_done()
 
-        current_set_id = _get_entity_id(
+        current_set_id = get_entity_id(
             hass, mock_config_entry_no_actions, "sensor", "current_set"
         )
         assert float(hass.states.get(current_set_id).state) == 0.0
 
-        active_id = _get_entity_id(
+        active_id = get_entity_id(
             hass, mock_config_entry_no_actions, "binary_sensor", "active"
         )
         assert hass.states.get(active_id).state == "off"
@@ -197,7 +133,7 @@ class TestSetLimitActions:
     ) -> None:
         """Charger receives the override current via the set_current action script."""
         calls = async_mock_service(hass, "script", "turn_on")
-        await _setup(hass, mock_config_entry_with_actions)
+        await setup_integration(hass, mock_config_entry_with_actions)
 
         calls.clear()
 
@@ -222,7 +158,7 @@ class TestSetLimitActions:
     ) -> None:
         """Charger receives a stop command when the override value is below the minimum."""
         calls = async_mock_service(hass, "script", "turn_on")
-        await _setup(hass, mock_config_entry_with_actions)
+        await setup_integration(hass, mock_config_entry_with_actions)
 
         # Start charging first
         hass.states.async_set(POWER_METER, "3000")
@@ -259,7 +195,7 @@ class TestSetLimitOneShot:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """Automatic balancing resumes after a manual override on the next power meter event."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
 
         # Manual override to 10 A
         await hass.services.async_call(
@@ -270,7 +206,7 @@ class TestSetLimitOneShot:
         )
         await hass.async_block_till_done()
 
-        current_set_id = _get_entity_id(
+        current_set_id = get_entity_id(
             hass, mock_config_entry_no_actions, "sensor", "current_set"
         )
         assert float(hass.states.get(current_set_id).state) == 10.0
@@ -302,12 +238,12 @@ class TestLastActionReasonSensor:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """Reason shows 'power_meter_update' after a normal power meter event."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
 
         hass.states.async_set(POWER_METER, "3000")
         await hass.async_block_till_done()
 
-        reason_id = _get_entity_id(
+        reason_id = get_entity_id(
             hass, mock_config_entry_no_actions, "sensor", "last_action_reason"
         )
         assert hass.states.get(reason_id).state == REASON_POWER_METER_UPDATE
@@ -318,7 +254,7 @@ class TestLastActionReasonSensor:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """Reason shows 'manual_override' after calling ev_lb.set_limit."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
 
         await hass.services.async_call(
             DOMAIN,
@@ -328,7 +264,7 @@ class TestLastActionReasonSensor:
         )
         await hass.async_block_till_done()
 
-        reason_id = _get_entity_id(
+        reason_id = get_entity_id(
             hass, mock_config_entry_no_actions, "sensor", "last_action_reason"
         )
         assert hass.states.get(reason_id).state == REASON_MANUAL_OVERRIDE
@@ -339,12 +275,12 @@ class TestLastActionReasonSensor:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """Reason shows 'fallback_unavailable' when the power meter becomes unavailable."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
 
         hass.states.async_set(POWER_METER, "unavailable")
         await hass.async_block_till_done()
 
-        reason_id = _get_entity_id(
+        reason_id = get_entity_id(
             hass, mock_config_entry_no_actions, "sensor", "last_action_reason"
         )
         assert hass.states.get(reason_id).state == REASON_FALLBACK_UNAVAILABLE
@@ -355,14 +291,14 @@ class TestLastActionReasonSensor:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """Reason shows 'parameter_change' when a runtime parameter like max charger current changes."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
 
         # Need a valid meter reading for parameter change to trigger recompute
         hass.states.async_set(POWER_METER, "3000")
         await hass.async_block_till_done()
 
         # Change max charger current
-        max_current_id = _get_entity_id(
+        max_current_id = get_entity_id(
             hass, mock_config_entry_no_actions, "number", "max_charger_current"
         )
         await hass.services.async_call(
@@ -373,7 +309,7 @@ class TestLastActionReasonSensor:
         )
         await hass.async_block_till_done()
 
-        reason_id = _get_entity_id(
+        reason_id = get_entity_id(
             hass, mock_config_entry_no_actions, "sensor", "last_action_reason"
         )
         assert hass.states.get(reason_id).state == REASON_PARAMETER_CHANGE
@@ -393,7 +329,7 @@ class TestServiceLifecycle:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """The set_limit service is available after the integration is set up."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
         assert hass.services.has_service(DOMAIN, SERVICE_SET_LIMIT)
 
     async def test_service_removed_on_unload(
@@ -402,7 +338,7 @@ class TestServiceLifecycle:
         mock_config_entry_no_actions: MockConfigEntry,
     ) -> None:
         """The set_limit service is removed when the last config entry is unloaded."""
-        await _setup(hass, mock_config_entry_no_actions)
+        await setup_integration(hass, mock_config_entry_no_actions)
         assert hass.services.has_service(DOMAIN, SERVICE_SET_LIMIT)
 
         await hass.config_entries.async_unload(mock_config_entry_no_actions.entry_id)

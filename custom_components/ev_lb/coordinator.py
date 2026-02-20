@@ -75,20 +75,7 @@ class EvLoadBalancerCoordinator:
             DEFAULT_UNAVAILABLE_FALLBACK_CURRENT,
         )
 
-        # Action script entity IDs (None when not configured).
-        # Prefer options over data so changes via options flow take effect.
-        self._action_set_current: str | None = entry.options.get(
-            CONF_ACTION_SET_CURRENT,
-            entry.data.get(CONF_ACTION_SET_CURRENT),
-        )
-        self._action_stop_charging: str | None = entry.options.get(
-            CONF_ACTION_STOP_CHARGING,
-            entry.data.get(CONF_ACTION_STOP_CHARGING),
-        )
-        self._action_start_charging: str | None = entry.options.get(
-            CONF_ACTION_START_CHARGING,
-            entry.data.get(CONF_ACTION_START_CHARGING),
-        )
+        self._init_action_scripts(entry)
 
         # Runtime parameters (updated by number/switch entities)
         self.max_charger_current: float = DEFAULT_MAX_CHARGER_CURRENT
@@ -113,6 +100,25 @@ class EvLoadBalancerCoordinator:
 
         # Listener removal callback
         self._unsub_listener: callback | None = None
+
+    def _init_action_scripts(self, entry: ConfigEntry) -> None:
+        """Load action script entity IDs from the config entry.
+
+        Prefers options over data so changes via options flow take
+        effect without deleting and re-creating the config entry.
+        """
+        self._action_set_current: str | None = entry.options.get(
+            CONF_ACTION_SET_CURRENT,
+            entry.data.get(CONF_ACTION_SET_CURRENT),
+        )
+        self._action_stop_charging: str | None = entry.options.get(
+            CONF_ACTION_STOP_CHARGING,
+            entry.data.get(CONF_ACTION_STOP_CHARGING),
+        )
+        self._action_start_charging: str | None = entry.options.get(
+            CONF_ACTION_START_CHARGING,
+            entry.data.get(CONF_ACTION_START_CHARGING),
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -220,12 +226,21 @@ class EvLoadBalancerCoordinator:
     def _apply_fallback_current(self) -> None:
         """Handle the power meter becoming unavailable or unknown.
 
-        Behavior depends on the configured ``unavailable_behavior``:
+        Resolves the appropriate fallback and applies it.  The "ignore"
+        mode keeps the last computed value; all other modes update the
+        charger current via ``_update_and_notify``.
+        """
+        fallback = self._resolve_fallback()
+        if fallback is None:
+            return
+        self._update_and_notify(0.0, fallback, REASON_FALLBACK_UNAVAILABLE)
 
-        * **ignore** — do nothing; keep the last computed values.
-        * **stop** — set charger current to 0 A (safest).
-        * **set_current** — apply the configured fallback current, capped
-          at the charger maximum so it never exceeds the physical limit.
+    def _resolve_fallback(self) -> float | None:
+        """Determine the fallback current for an unavailable power meter.
+
+        Returns ``None`` for ignore mode (caller should skip the update),
+        ``0.0`` for stop mode, or the configured fallback capped at the
+        charger maximum for set-current mode.
         """
         behavior = self._unavailable_behavior
 
@@ -235,11 +250,9 @@ class EvLoadBalancerCoordinator:
                 self._power_meter_entity,
                 self.current_set_a,
             )
-            return
+            return None
 
         if behavior == UNAVAILABLE_BEHAVIOR_SET_CURRENT:
-            # Cap at the charger maximum so the fallback never exceeds the
-            # physical charger limit, even if the configured value is higher.
             fallback = min(self._unavailable_fallback_a, self.max_charger_current)
             _LOGGER.warning(
                 "Power meter %s is unavailable — applying fallback current %.1f A "
@@ -249,17 +262,14 @@ class EvLoadBalancerCoordinator:
                 self._unavailable_fallback_a,
                 self.max_charger_current,
             )
-        else:
-            # Default: stop charging
-            fallback = 0.0
-            _LOGGER.warning(
-                "Power meter %s is unavailable — stopping charging (0 A)",
-                self._power_meter_entity,
-            )
+            return fallback
 
-        # Without a valid meter reading, headroom is unknown — report 0 A
-        # as available and apply the determined fallback for the charger.
-        self._update_and_notify(0.0, fallback, REASON_FALLBACK_UNAVAILABLE)
+        # Default: stop charging
+        _LOGGER.warning(
+            "Power meter %s is unavailable — stopping charging (0 A)",
+            self._power_meter_entity,
+        )
+        return 0.0
 
     # ------------------------------------------------------------------
     # Core computation
