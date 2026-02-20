@@ -403,10 +403,10 @@ class TestPowerMeterEdgeCases:
             hass, mock_config_entry, "sensor", "current_set"
         )
 
-        # First set a valid value
+        # First set a valid value — 3000 W at 230 V → 18 A
         hass.states.async_set(POWER_METER, "3000")
         await hass.async_block_till_done()
-        assert float(hass.states.get(current_set_id).state) > 0
+        assert float(hass.states.get(current_set_id).state) == 18.0
 
         # Now set unavailable — should fall back to 0 A (stop charging)
         hass.states.async_set(POWER_METER, "unavailable")
@@ -423,9 +423,10 @@ class TestPowerMeterEdgeCases:
             hass, mock_config_entry, "sensor", "current_set"
         )
 
+        # First set a valid value — 3000 W at 230 V → 18 A
         hass.states.async_set(POWER_METER, "3000")
         await hass.async_block_till_done()
-        assert float(hass.states.get(current_set_id).state) > 0
+        assert float(hass.states.get(current_set_id).state) == 18.0
 
         hass.states.async_set(POWER_METER, "unknown")
         await hass.async_block_till_done()

@@ -173,6 +173,8 @@ class EvLoadBalancerCoordinator:
             fallback,
         )
 
+        # Without a valid meter reading, headroom is unknown — report 0 A
+        # as available and apply the user-configured fallback for the charger.
         self.available_current_a = 0.0
         self.current_set_a = fallback
         self.active = fallback > 0
