@@ -21,8 +21,12 @@ from custom_components.ev_lb.const import (
     CONF_ACTION_STOP_CHARGING,
     CONF_MAX_SERVICE_CURRENT,
     CONF_POWER_METER_ENTITY,
+    CONF_UNAVAILABLE_BEHAVIOR,
+    CONF_UNAVAILABLE_FALLBACK_CURRENT,
     CONF_VOLTAGE,
     DOMAIN,
+    UNAVAILABLE_BEHAVIOR_IGNORE,
+    UNAVAILABLE_BEHAVIOR_SET_CURRENT,
 )
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -83,6 +87,37 @@ def mock_config_entry_no_actions() -> MockConfigEntry:
 def mock_config_entry(mock_config_entry_no_actions: MockConfigEntry) -> MockConfigEntry:
     """Alias for mock_config_entry_no_actions — used by older test modules."""
     return mock_config_entry_no_actions
+
+
+@pytest.fixture
+def mock_config_entry_fallback() -> MockConfigEntry:
+    """Create a mock config entry with set_current fallback behavior."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_POWER_METER_ENTITY: POWER_METER,
+            CONF_VOLTAGE: 230.0,
+            CONF_MAX_SERVICE_CURRENT: 32.0,
+            CONF_UNAVAILABLE_BEHAVIOR: UNAVAILABLE_BEHAVIOR_SET_CURRENT,
+            CONF_UNAVAILABLE_FALLBACK_CURRENT: 10.0,
+        },
+        title="EV Load Balancing",
+    )
+
+
+@pytest.fixture
+def mock_config_entry_ignore() -> MockConfigEntry:
+    """Create a mock config entry with ignore unavailable behavior."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_POWER_METER_ENTITY: POWER_METER,
+            CONF_VOLTAGE: 230.0,
+            CONF_MAX_SERVICE_CURRENT: 32.0,
+            CONF_UNAVAILABLE_BEHAVIOR: UNAVAILABLE_BEHAVIOR_IGNORE,
+        },
+        title="EV Load Balancing",
+    )
 
 
 # -----------------------------------------------------------------------

@@ -18,11 +18,6 @@ from homeassistant.exceptions import HomeAssistantError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ev_lb.const import (
-    CONF_MAX_SERVICE_CURRENT,
-    CONF_POWER_METER_ENTITY,
-    CONF_UNAVAILABLE_BEHAVIOR,
-    CONF_UNAVAILABLE_FALLBACK_CURRENT,
-    CONF_VOLTAGE,
     DOMAIN,
     EVENT_ACTION_FAILED,
     EVENT_CHARGING_RESUMED,
@@ -32,8 +27,6 @@ from custom_components.ev_lb.const import (
     NOTIFICATION_FALLBACK_ACTIVATED_FMT,
     NOTIFICATION_METER_UNAVAILABLE_FMT,
     NOTIFICATION_OVERLOAD_STOP_FMT,
-    UNAVAILABLE_BEHAVIOR_IGNORE,
-    UNAVAILABLE_BEHAVIOR_SET_CURRENT,
 )
 from conftest import POWER_METER, setup_integration
 
@@ -270,21 +263,10 @@ class TestFallbackActivatedEvent:
     """HA event fires and persistent notification appears when the fallback current is applied."""
 
     async def test_fallback_activated_event_fires(
-        self, hass: HomeAssistant,
+        self, hass: HomeAssistant, mock_config_entry_fallback: MockConfigEntry,
     ) -> None:
         """An event notifies automations when the fallback current is applied due to meter unavailability."""
-        entry = MockConfigEntry(
-            domain=DOMAIN,
-            data={
-                CONF_POWER_METER_ENTITY: POWER_METER,
-                CONF_VOLTAGE: 230.0,
-                CONF_MAX_SERVICE_CURRENT: 32.0,
-                CONF_UNAVAILABLE_BEHAVIOR: UNAVAILABLE_BEHAVIOR_SET_CURRENT,
-                CONF_UNAVAILABLE_FALLBACK_CURRENT: 10.0,
-            },
-            title="EV Load Balancing",
-        )
-        await setup_integration(hass, entry)
+        await setup_integration(hass, mock_config_entry_fallback)
         events = _collect_events(hass, EVENT_FALLBACK_ACTIVATED)
 
         hass.states.async_set(POWER_METER, "3000")
@@ -295,27 +277,16 @@ class TestFallbackActivatedEvent:
         await hass.async_block_till_done()
 
         assert len(events) == 1
-        assert events[0]["entry_id"] == entry.entry_id
+        assert events[0]["entry_id"] == mock_config_entry_fallback.entry_id
         assert events[0]["power_meter_entity"] == POWER_METER
         assert events[0]["fallback_current_a"] == 10.0
 
     async def test_fallback_creates_persistent_notification(
-        self, hass: HomeAssistant,
+        self, hass: HomeAssistant, mock_config_entry_fallback: MockConfigEntry,
     ) -> None:
         """A persistent notification warns the user when fallback current is applied."""
-        entry = MockConfigEntry(
-            domain=DOMAIN,
-            data={
-                CONF_POWER_METER_ENTITY: POWER_METER,
-                CONF_VOLTAGE: 230.0,
-                CONF_MAX_SERVICE_CURRENT: 32.0,
-                CONF_UNAVAILABLE_BEHAVIOR: UNAVAILABLE_BEHAVIOR_SET_CURRENT,
-                CONF_UNAVAILABLE_FALLBACK_CURRENT: 10.0,
-            },
-            title="EV Load Balancing",
-        )
         with patch(PN_CREATE) as mock_create:
-            await setup_integration(hass, entry)
+            await setup_integration(hass, mock_config_entry_fallback)
 
             hass.states.async_set(POWER_METER, "3000")
             await hass.async_block_till_done()
@@ -328,26 +299,15 @@ class TestFallbackActivatedEvent:
             mock_create.assert_called_once()
             call_kwargs = mock_create.call_args
             assert NOTIFICATION_FALLBACK_ACTIVATED_FMT.format(
-                entry_id=entry.entry_id
+                entry_id=mock_config_entry_fallback.entry_id
             ) in str(call_kwargs)
 
     async def test_fallback_notification_dismissed_on_meter_recovery(
-        self, hass: HomeAssistant,
+        self, hass: HomeAssistant, mock_config_entry_fallback: MockConfigEntry,
     ) -> None:
         """The fallback notification is dismissed when the meter recovers."""
-        entry = MockConfigEntry(
-            domain=DOMAIN,
-            data={
-                CONF_POWER_METER_ENTITY: POWER_METER,
-                CONF_VOLTAGE: 230.0,
-                CONF_MAX_SERVICE_CURRENT: 32.0,
-                CONF_UNAVAILABLE_BEHAVIOR: UNAVAILABLE_BEHAVIOR_SET_CURRENT,
-                CONF_UNAVAILABLE_FALLBACK_CURRENT: 10.0,
-            },
-            title="EV Load Balancing",
-        )
         with patch(PN_CREATE), patch(PN_DISMISS) as mock_dismiss:
-            await setup_integration(hass, entry)
+            await setup_integration(hass, mock_config_entry_fallback)
 
             hass.states.async_set(POWER_METER, "3000")
             await hass.async_block_till_done()
@@ -363,7 +323,7 @@ class TestFallbackActivatedEvent:
             await hass.async_block_till_done()
 
             notification_id = NOTIFICATION_FALLBACK_ACTIVATED_FMT.format(
-                entry_id=entry.entry_id
+                entry_id=mock_config_entry_fallback.entry_id
             )
             dismiss_ids = [
                 call.args[1] for call in mock_dismiss.call_args_list
@@ -380,20 +340,10 @@ class TestIgnoreModeNoEvent:
     """No event or notification fires when the meter is unavailable in ignore mode."""
 
     async def test_no_event_on_ignore_mode(
-        self, hass: HomeAssistant,
+        self, hass: HomeAssistant, mock_config_entry_ignore: MockConfigEntry,
     ) -> None:
         """The integration does not fire events when the user chose to ignore meter outages."""
-        entry = MockConfigEntry(
-            domain=DOMAIN,
-            data={
-                CONF_POWER_METER_ENTITY: POWER_METER,
-                CONF_VOLTAGE: 230.0,
-                CONF_MAX_SERVICE_CURRENT: 32.0,
-                CONF_UNAVAILABLE_BEHAVIOR: UNAVAILABLE_BEHAVIOR_IGNORE,
-            },
-            title="EV Load Balancing",
-        )
-        await setup_integration(hass, entry)
+        await setup_integration(hass, mock_config_entry_ignore)
         meter_events = _collect_events(hass, EVENT_METER_UNAVAILABLE)
         fallback_events = _collect_events(hass, EVENT_FALLBACK_ACTIVATED)
 

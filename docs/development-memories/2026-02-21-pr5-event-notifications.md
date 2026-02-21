@@ -12,16 +12,16 @@ The integration could compute and apply charger current changes but had no mecha
 
 ## What changed
 
-- **`custom_components/ev_lb/const.py`**: Added event type constants (`EVENT_METER_UNAVAILABLE`, `EVENT_OVERLOAD_STOP`, `EVENT_CHARGING_RESUMED`, `EVENT_FALLBACK_ACTIVATED`) and persistent notification ID templates (`NOTIFICATION_METER_UNAVAILABLE_FMT`, `NOTIFICATION_OVERLOAD_STOP_FMT`, `NOTIFICATION_FALLBACK_ACTIVATED_FMT`).
-- **`custom_components/ev_lb/coordinator.py`**: Added `_fire_events` method that fires HA bus events and creates/dismisses persistent notifications on state transitions. Called from `_update_and_notify`.
-- **`tests/test_event_notifications.py`** (new file): 14 integration tests verifying event payloads, persistent notification creation, notification dismissal on recovery, ignore-mode silence, and absence of spurious events.
+- **`custom_components/ev_lb/const.py`**: Added event type constants (`EVENT_METER_UNAVAILABLE`, `EVENT_OVERLOAD_STOP`, `EVENT_CHARGING_RESUMED`, `EVENT_FALLBACK_ACTIVATED`, `EVENT_ACTION_FAILED`) and persistent notification ID templates (`NOTIFICATION_METER_UNAVAILABLE_FMT`, `NOTIFICATION_OVERLOAD_STOP_FMT`, `NOTIFICATION_FALLBACK_ACTIVATED_FMT`).
+- **`custom_components/ev_lb/coordinator.py`**: Added `_fire_events` method that fires HA bus events and creates/dismisses persistent notifications on state transitions. Called from `_update_and_notify`. Action failure event fired from `_call_action`.
+- **`tests/test_event_notifications.py`** (new file): 15 integration tests verifying event payloads, persistent notification creation, notification dismissal on recovery, ignore-mode silence, absence of spurious events, and action failure events.
 - **`docs/development-memories/2026-02-19-testing-guide.md`**: Updated test count from 105 to 119.
 - **`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`**: Marked PR-5-MVP as done.
 - **`README.md`**: Updated status line.
 
 ## Design decisions
 
-### 1. Four event types covering the notable conditions
+### 1. Five event types covering the notable conditions
 
 | Event type | Condition | Persistent notification |
 |---|---|---|
@@ -29,6 +29,7 @@ The integration could compute and apply charger current changes but had no mecha
 | `ev_lb_fallback_activated` | Power meter becomes unavailable in set_current mode | Yes — fault |
 | `ev_lb_overload_stop` | Household load exceeds service limit, charging stops | Yes — fault |
 | `ev_lb_charging_resumed` | Charging resumes from a stopped state | No — resolution |
+| `ev_lb_action_failed` | Charger action script raises an error | No — diagnostic |
 
 Events are fired via `hass.bus.async_fire` and carry structured payloads including `entry_id` so automations can identify which charger is affected (preparing for Phase 2 multi-charger support).
 
@@ -57,7 +58,7 @@ The `persistent_notification` component is not loaded in the `pytest-homeassista
 
 ## Test coverage
 
-14 integration tests in `test_event_notifications.py` covering:
+15 integration tests in `test_event_notifications.py` covering:
 - Meter unavailable event fires with correct payload (entry_id, power_meter_entity)
 - Meter unavailable creates persistent notification
 - Meter unavailable notification dismissed on meter recovery
@@ -72,8 +73,9 @@ The `persistent_notification` component is not loaded in the `pytest-homeassista
 - No event fires in ignore mode
 - No events on steady-state (same power meter value)
 - No overload event when charger is already stopped and stays stopped
+- Action failed event fires with correct payload (entry_id, action_name, entity_id, error)
 
-All 119 tests pass (105 existing + 14 new).
+All 120 tests pass (105 existing + 15 new).
 
 ## Lessons learned
 
