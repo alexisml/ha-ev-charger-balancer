@@ -6,19 +6,23 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "30 1 * * 1"
+    - cron: "30 1 * * 1" # Every Monday at 01:30 UTC
 
 permissions:
-  actions: read
+  # Required to read repository source code and check out commits
   contents: read
-  packages: read
+  # Required to upload SARIF results to GitHub Security → Code scanning
   security-events: write
+  # Required to fetch internal or private CodeQL query packs
+  packages: read
+  # Required on private repositories to read workflow run context
+  actions: read
 
 jobs:
   analyze:
     name: Analyze (python)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repository
