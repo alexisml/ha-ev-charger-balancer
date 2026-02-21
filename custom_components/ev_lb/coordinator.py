@@ -340,13 +340,6 @@ class EvLoadBalancerCoordinator:
         if final_a < self.current_set_a:
             self._last_reduction_time = now
 
-        if final_a != target_a:
-            _LOGGER.debug(
-                "Ramp-up cooldown holding current at %.1f A (target %.1f A)",
-                final_a,
-                target_a,
-            )
-
         _LOGGER.debug(
             "Recompute (%s): house=%.0f W, available=%.1f A, "
             "raw_target=%.1f A, clamped=%.1f A, final=%.1f A",
@@ -357,6 +350,13 @@ class EvLoadBalancerCoordinator:
             target_a,
             final_a,
         )
+
+        if final_a != target_a:
+            _LOGGER.debug(
+                "Ramp-up cooldown holding current at %.1f A (target %.1f A)",
+                final_a,
+                target_a,
+            )
 
         # Update computed state and execute actions
         self._update_and_notify(round(available_a, 2), final_a, reason)
