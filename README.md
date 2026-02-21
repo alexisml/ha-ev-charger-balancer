@@ -25,7 +25,7 @@ This project gives Home Assistant users a native, no-helper-required solution to
 
 > ⚠️ **Current limitation (PR-1):** This integration currently supports **one charger per instance**. Multiple-charger support with per-charger prioritization is planned for Phase 2 (post-MVP). Multiple instances of this integration are not supported — only one config entry can be created. See the [MVP plan](docs/documentation/milestones/01-2026-02-19-mvp-plan.md) and the [multi-charger plan](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md) for details.
 
-Status: In development — custom integration (PR-6: manual override + observability complete)
+Status: In development — custom integration (PR-1 through PR-6-MVP complete; working toward PR-7-MVP: HACS release)
 
 ## Why a custom integration?
 
@@ -56,6 +56,7 @@ See [`docs/development-memories/2026-02-19-lessons-learned.md`](docs/development
 | **Unavailable behavior** | What to do when the power meter is unavailable: **stop** (default), **ignore**, or **set current** |
 | **Fallback current** (A) | Charging current to use in "set current" mode — capped at the charger maximum to prevent exceeding the physical limit |
 | **Actions** | User-supplied scripts: `set_current`, `stop_charging`, `start_charging` — see the [Action Scripts Guide](docs/documentation/action-scripts-guide.md) |
+| **Event notifications** | HA bus events fired on fault conditions (meter unavailable, overload, fallback, charging resumed) — see the [Event Notifications Guide](docs/documentation/event-notifications-guide.md) |
 
 ---
 

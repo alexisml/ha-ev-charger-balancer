@@ -64,6 +64,18 @@ REASON_MANUAL_OVERRIDE = "manual_override"
 REASON_FALLBACK_UNAVAILABLE = "fallback_unavailable"
 REASON_PARAMETER_CHANGE = "parameter_change"
 
+# Event types for notable conditions
+EVENT_METER_UNAVAILABLE = f"{DOMAIN}_meter_unavailable"
+EVENT_OVERLOAD_STOP = f"{DOMAIN}_overload_stop"
+EVENT_CHARGING_RESUMED = f"{DOMAIN}_charging_resumed"
+EVENT_FALLBACK_ACTIVATED = f"{DOMAIN}_fallback_activated"
+EVENT_ACTION_FAILED = f"{DOMAIN}_action_failed"
+
+# Persistent notification ID templates (one per entry)
+NOTIFICATION_METER_UNAVAILABLE_FMT = f"{DOMAIN}_meter_unavailable_{{entry_id}}"
+NOTIFICATION_OVERLOAD_STOP_FMT = f"{DOMAIN}_overload_stop_{{entry_id}}"
+NOTIFICATION_FALLBACK_ACTIVATED_FMT = f"{DOMAIN}_fallback_activated_{{entry_id}}"
+
 
 def get_device_info(entry: ConfigEntry) -> DeviceInfo:
     """Return shared DeviceInfo for all entities in a config entry."""
