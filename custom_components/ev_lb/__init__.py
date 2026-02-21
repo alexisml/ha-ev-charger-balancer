@@ -1,5 +1,7 @@
 """EV Charger Load Balancing integration for Home Assistant."""
 
+import logging
+
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
@@ -7,6 +9,8 @@ from homeassistant.core import HomeAssistant, ServiceCall, callback
 
 from .const import DOMAIN, PLATFORMS, SERVICE_SET_LIMIT
 from .coordinator import EvLoadBalancerCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_LIMIT_SCHEMA = vol.Schema(
     {
@@ -33,6 +37,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     _register_services(hass)
 
+    _LOGGER.debug("Entry %s set up successfully", entry.entry_id)
+
     return True
 
 
@@ -50,6 +56,7 @@ def _register_services(hass: HomeAssistant) -> None:
         In the current single-charger architecture there is exactly one.
         """
         current_a = call.data["current_a"]
+        _LOGGER.debug("Service %s.%s called with current_a=%.1f", DOMAIN, SERVICE_SET_LIMIT, current_a)
         for entry_data in hass.data[DOMAIN].values():
             coordinator: EvLoadBalancerCoordinator = entry_data["coordinator"]
             coordinator.manual_set_limit(current_a)
@@ -82,5 +89,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Unregister services when no entries remain
     if not hass.data[DOMAIN]:
         hass.services.async_remove(DOMAIN, SERVICE_SET_LIMIT)
+
+    _LOGGER.debug("Entry %s unloaded (ok=%s)", entry.entry_id, unload_ok)
 
     return unload_ok

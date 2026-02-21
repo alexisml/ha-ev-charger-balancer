@@ -145,7 +145,12 @@ class EvLoadBalancerCoordinator:
             self._handle_power_change,
         )
         _LOGGER.debug(
-            "Coordinator started — listening to %s", self._power_meter_entity
+            "Coordinator started — listening to %s "
+            "(voltage=%.0f V, service_limit=%.0f A, unavailable=%s)",
+            self._power_meter_entity,
+            self._voltage,
+            self._max_service_current,
+            self._unavailable_behavior,
         )
 
     @callback
@@ -164,6 +169,7 @@ class EvLoadBalancerCoordinator:
     def _handle_power_change(self, event: Event) -> None:
         """React to a power-meter state change and recompute the target."""
         if not self.enabled:
+            _LOGGER.debug("Power meter changed but load balancing is disabled — skipping")
             return
 
         new_state = event.data.get("new_state")
@@ -197,10 +203,15 @@ class EvLoadBalancerCoordinator:
         effect immediately without waiting for the next power-meter event.
         """
         if not self.enabled:
+            _LOGGER.debug("Parameter changed but load balancing is disabled — skipping recompute")
             return
 
         state = self.hass.states.get(self._power_meter_entity)
         if state is None or state.state in ("unavailable", "unknown"):
+            _LOGGER.debug(
+                "Parameter changed but power meter is %s — skipping recompute",
+                state.state if state else "missing",
+            )
             return
 
         try:
@@ -208,6 +219,10 @@ class EvLoadBalancerCoordinator:
         except (ValueError, TypeError):
             return
 
+        _LOGGER.debug(
+            "Runtime parameter changed — recomputing with last meter value %.1f W",
+            house_power_w,
+        )
         self._recompute(house_power_w, REASON_PARAMETER_CHANGE)
 
     # ------------------------------------------------------------------
@@ -229,6 +244,11 @@ class EvLoadBalancerCoordinator:
             self.min_ev_current,
         )
         target = 0.0 if clamped is None else clamped
+        _LOGGER.debug(
+            "Manual override: requested=%.1f A, clamped=%.1f A",
+            current_a,
+            target,
+        )
         self._update_and_notify(self.available_current_a, target, REASON_MANUAL_OVERRIDE)
 
     # ------------------------------------------------------------------
@@ -257,7 +277,7 @@ class EvLoadBalancerCoordinator:
         behavior = self._unavailable_behavior
 
         if behavior == UNAVAILABLE_BEHAVIOR_IGNORE:
-            _LOGGER.info(
+            _LOGGER.debug(
                 "Power meter %s is unavailable — ignoring (keeping last value %.1f A)",
                 self._power_meter_entity,
                 self.current_set_a,
@@ -320,6 +340,24 @@ class EvLoadBalancerCoordinator:
         if final_a < self.current_set_a:
             self._last_reduction_time = now
 
+        if final_a != target_a:
+            _LOGGER.debug(
+                "Ramp-up cooldown holding current at %.1f A (target %.1f A)",
+                final_a,
+                target_a,
+            )
+
+        _LOGGER.debug(
+            "Recompute (%s): house=%.0f W, available=%.1f A, "
+            "raw_target=%.1f A, clamped=%.1f A, final=%.1f A",
+            reason,
+            house_power_w,
+            available_a,
+            raw_target_a,
+            target_a,
+            final_a,
+        )
+
         # Update computed state and execute actions
         self._update_and_notify(round(available_a, 2), final_a, reason)
 
@@ -343,6 +381,12 @@ class EvLoadBalancerCoordinator:
         self.current_set_a = current_a
         self.active = current_a > 0
         self.last_action_reason = reason
+
+        # Log significant transitions at info level (low cadence)
+        if not prev_active and self.active:
+            _LOGGER.info("Charging started at %.1f A", current_a)
+        elif prev_active and not self.active:
+            _LOGGER.info("Charging stopped (was %.1f A, reason=%s)", prev_current, reason)
 
         # Fire HA events and manage persistent notifications
         self._fire_events(prev_active, prev_current, reason)
