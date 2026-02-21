@@ -3,6 +3,7 @@
 [![CodeQL](https://github.com/alexisml/ha-ev-charger-balancer/actions/workflows/codeql.yml/badge.svg)](https://github.com/alexisml/ha-ev-charger-balancer/actions/workflows/codeql.yml)
 [![Type Check](https://github.com/alexisml/ha-ev-charger-balancer/actions/workflows/type-check.yml/badge.svg)](https://github.com/alexisml/ha-ev-charger-balancer/actions/workflows/type-check.yml)
 [![Spell Check](https://github.com/alexisml/ha-ev-charger-balancer/actions/workflows/spell-check.yml/badge.svg)](https://github.com/alexisml/ha-ev-charger-balancer/actions/workflows/spell-check.yml)
+[![Dependabot](https://img.shields.io/badge/Dependabot-enabled-brightgreen?logo=dependabot)](https://github.com/alexisml/ha-ev-charger-balancer/blob/main/.github/dependabot.yml)
 
 # EV Charger Load Balancing (HACS)
 
