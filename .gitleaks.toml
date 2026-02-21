@@ -5,7 +5,7 @@
 # the end of the line:
 #   # gitleaks:allow
 #
-# To add a path-level allowlist entry, add a [[allowlist.paths]] block below.
+# To add a path-level allowlist entry, add another regex to the 'paths' array in the [allowlist] block below.
 
 title = "ha-ev-charger-balancer gitleaks config"
 

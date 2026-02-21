@@ -226,7 +226,9 @@ brew install gitleaks
 gitleaks detect --source . --config .gitleaks.toml
 ```
 To suppress a confirmed false positive on a specific line, append `# gitleaks:allow` to that line.
-For path-level suppressions, add an `[[allowlist.paths]]` entry in `.gitleaks.toml`.
+For path-level suppressions, add the path regex to the `paths` array under the `[allowlist]` table in `.gitleaks.toml`.
+
+**Dependency Review**: this check is GitHub-only and runs automatically on every pull request — no local tooling is required.
 
 For the full research plan, design decisions, and lessons learned, see:
 - [`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`](docs/documentation/milestones/01-2026-02-19-mvp-plan.md)

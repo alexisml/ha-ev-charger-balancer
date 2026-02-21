@@ -1,7 +1,7 @@
 Title: PR-8 — Add Ruff linting, dependency review, and Gitleaks secret scanning CI
 Date: 2026-02-21
 Author: copilot
-Status: merged
+Status: in-review
 Summary: Documents why Ruff, dependency-review, and Gitleaks were chosen, configuration decisions, and lessons learned.
 
 ---
@@ -27,9 +27,9 @@ The repository had unit tests, CodeQL security scanning, Pyright type checking, 
 
 Ruff is 10–100× faster than flake8 or pylint, written in Rust, and has zero transitive Python dependencies. It reads the same `pyproject.toml` that already contained the codespell config, keeping all tool config co-located. The E/F/W rule set was chosen as the minimal, widely-accepted baseline (PEP 8 style + pyflakes unused-import/undefined-name checks) without introducing opinionated rules that would require significant code changes.
 
-### 2. Ruff not pinned in the initial version
+### 2. Ruff version pinned to 0.7.4
 
-Ruff follows semver and does not add new lint rules in patch versions. The `pip install ruff` step was kept unpinned intentionally to keep the workflow simple; a pinned version (similar to how Pyright is pinned) should be introduced in a follow-up maintenance commit once the project stabilises on a specific Ruff version.
+Ruff follows semver and does not add new lint rules in patch versions, which makes unpinned installs low risk during short experimental periods. However, to keep lint results reproducible over time and avoid surprise rule changes as the project grows, the workflow pins Ruff to `0.7.4` in `.github/workflows/ruff.yml`. Local development can use newer Ruff versions freely, but CI remains locked to the pinned version until we explicitly decide to upgrade.
 
 ### 3. `ruff format --check` not enabled
 
@@ -59,7 +59,7 @@ Extending the default ruleset rather than defining rules from scratch ensures Gi
 
 ## What's next
 
-- Pin Ruff to a specific version in `ruff.yml` once the project settles on a version (similar to how Pyright is pinned in `type-check.yml`).
+- Bump the pinned Ruff version periodically to stay current (similar to how Pyright is bumped in `type-check.yml`).
 - Consider enabling `ruff format --check` in a dedicated formatting PR that applies `ruff format` to the whole codebase in one commit.
 - Consider enabling the `I` (isort) rule category after a one-shot `ruff check --fix --select I` pass to fix all import ordering issues.
 - Bump `actions/dependency-review-action` and `gitleaks/gitleaks-action` versions via Dependabot (already configured in `.github/dependabot.yml`).
