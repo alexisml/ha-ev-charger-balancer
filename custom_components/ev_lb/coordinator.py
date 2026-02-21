@@ -12,7 +12,6 @@ on every state transition.
 
 from __future__ import annotations
 
-import logging
 import time
 
 from homeassistant.config_entries import ConfigEntry
@@ -53,12 +52,19 @@ from .const import (
     REASON_PARAMETER_CHANGE,
     REASON_POWER_METER_UPDATE,
     SIGNAL_UPDATE_FMT,
+    STATE_ADJUSTING,
+    STATE_CHARGING,
+    STATE_DISABLED,
+    STATE_METER_UNAVAILABLE,
+    STATE_RAMP_UP_HOLD,
+    STATE_STOPPED,
     UNAVAILABLE_BEHAVIOR_IGNORE,
     UNAVAILABLE_BEHAVIOR_SET_CURRENT,
 )
 from .load_balancer import apply_ramp_up_limit, clamp_current, compute_available_current
+from ._log import get_logger
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = get_logger(__name__)
 
 
 class EvLoadBalancerCoordinator:
@@ -99,6 +105,7 @@ class EvLoadBalancerCoordinator:
         self.available_current_a: float = 0.0
         self.active: bool = False
         self.last_action_reason: str = ""
+        self.balancer_state: str = STATE_STOPPED
 
         # Ramp-up cooldown tracking
         self._last_reduction_time: float | None = None
@@ -170,6 +177,8 @@ class EvLoadBalancerCoordinator:
         """React to a power-meter state change and recompute the target."""
         if not self.enabled:
             _LOGGER.debug("Power meter changed but load balancing is disabled — skipping")
+            self.balancer_state = STATE_DISABLED
+            async_dispatcher_send(self.hass, self.signal_update)
             return
 
         new_state = event.data.get("new_state")
@@ -358,15 +367,22 @@ class EvLoadBalancerCoordinator:
                 target_a,
             )
 
+        # Determine balancer operational state
+        ramp_up_held = final_a != target_a and final_a < target_a
+
         # Update computed state and execute actions
-        self._update_and_notify(round(available_a, 2), final_a, reason)
+        self._update_and_notify(round(available_a, 2), final_a, reason, ramp_up_held)
 
     # ------------------------------------------------------------------
     # State update, action execution, and entity notification
     # ------------------------------------------------------------------
 
     def _update_and_notify(
-        self, available_a: float, current_a: float, reason: str = ""
+        self,
+        available_a: float,
+        current_a: float,
+        reason: str = "",
+        ramp_up_held: bool = False,
     ) -> None:
         """Update state, fire charger actions for transitions, and notify entities.
 
@@ -381,6 +397,11 @@ class EvLoadBalancerCoordinator:
         self.current_set_a = current_a
         self.active = current_a > 0
         self.last_action_reason = reason
+
+        # Determine balancer operational state
+        self.balancer_state = self._resolve_balancer_state(
+            prev_active, prev_current, ramp_up_held, reason,
+        )
 
         # Log significant transitions at info level (low cadence)
         if not prev_active and self.active:
@@ -399,6 +420,35 @@ class EvLoadBalancerCoordinator:
             )
 
         async_dispatcher_send(self.hass, self.signal_update)
+
+    def _resolve_balancer_state(
+        self,
+        prev_active: bool,
+        prev_current: float,
+        ramp_up_held: bool,
+        reason: str,
+    ) -> str:
+        """Determine the balancer's operational state for the diagnostic sensor.
+
+        Maps to the charger state transitions described in the README:
+        - **disabled**: load balancing switch is off
+        - **meter_unavailable**: power meter is unavailable (fallback active)
+        - **stopped**: charger is off (target = 0 A)
+        - **ramp_up_hold**: increase blocked by cooldown
+        - **adjusting**: current changed this cycle
+        - **charging**: active and steady (current unchanged)
+        """
+        if not self.enabled:
+            return STATE_DISABLED
+        if reason == REASON_FALLBACK_UNAVAILABLE:
+            return STATE_METER_UNAVAILABLE
+        if not self.active:
+            return STATE_STOPPED
+        if ramp_up_held:
+            return STATE_RAMP_UP_HOLD
+        if self.current_set_a != prev_current or not prev_active:
+            return STATE_ADJUSTING
+        return STATE_CHARGING
 
     # ------------------------------------------------------------------
     # Event notifications and persistent notifications

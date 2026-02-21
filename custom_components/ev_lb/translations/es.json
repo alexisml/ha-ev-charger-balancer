@@ -61,6 +61,9 @@
       },
       "last_action_reason": {
         "name": "Razón de la última acción"
+      },
+      "balancer_state": {
+        "name": "Estado del balanceador"
       }
     },
     "binary_sensor": {

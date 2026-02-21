@@ -1,7 +1,5 @@
 """EV Charger Load Balancing integration for Home Assistant."""
 
-import logging
-
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
@@ -9,8 +7,9 @@ from homeassistant.core import HomeAssistant, ServiceCall, callback
 
 from .const import DOMAIN, PLATFORMS, SERVICE_SET_LIMIT
 from .coordinator import EvLoadBalancerCoordinator
+from ._log import get_logger
 
-_LOGGER = logging.getLogger(__name__)
+_LOGGER = get_logger(__name__)
 
 SERVICE_SET_LIMIT_SCHEMA = vol.Schema(
     {

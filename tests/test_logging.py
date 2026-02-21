@@ -3,7 +3,7 @@
 Tests verify that:
 - Debug logs provide full computation details for runtime debugging
 - Info logs are limited to significant state transitions (start/stop charging)
-- Warning logs fire only for actual problems (unparseable values, action failures,
+- Warning logs fire only for actual problems (unparsable values, action failures,
   unavailable meter in stop/fallback modes)
 - Ignore-mode unavailable meter logs at debug (not info) to avoid log noise
 """
@@ -158,7 +158,7 @@ class TestInfoLogs:
 class TestWarningLogs:
     """Warning-level logs fire only for real problems that need attention."""
 
-    async def test_unparseable_meter_value_logs_warning(
+    async def test_unparsable_meter_value_logs_warning(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog
     ) -> None:
         """A non-numeric power meter value triggers a warning."""
