@@ -21,6 +21,11 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_state_change_event
 
+from homeassistant.components.persistent_notification import (
+    async_create as pn_async_create,
+    async_dismiss as pn_async_dismiss,
+)
+
 from .const import (
     CONF_ACTION_SET_CURRENT,
     CONF_ACTION_START_CHARGING,
@@ -35,6 +40,13 @@ from .const import (
     DEFAULT_RAMP_UP_TIME,
     DEFAULT_UNAVAILABLE_BEHAVIOR,
     DEFAULT_UNAVAILABLE_FALLBACK_CURRENT,
+    EVENT_CHARGING_RESUMED,
+    EVENT_FALLBACK_ACTIVATED,
+    EVENT_METER_UNAVAILABLE,
+    EVENT_OVERLOAD_STOP,
+    NOTIFICATION_FALLBACK_ACTIVATED_FMT,
+    NOTIFICATION_METER_UNAVAILABLE_FMT,
+    NOTIFICATION_OVERLOAD_STOP_FMT,
     REASON_FALLBACK_UNAVAILABLE,
     REASON_MANUAL_OVERRIDE,
     REASON_PARAMETER_CHANGE,
@@ -320,8 +332,8 @@ class EvLoadBalancerCoordinator:
         """Update state, fire charger actions for transitions, and notify entities.
 
         Captures the previous state, applies the new values, schedules any
-        required charger action calls, and sends the HA dispatcher signal
-        so entity platforms can refresh.
+        required charger action calls, fires HA events for notable conditions,
+        and sends the HA dispatcher signal so entity platforms can refresh.
         """
         prev_active = self.active
         prev_current = self.current_set_a
@@ -331,6 +343,9 @@ class EvLoadBalancerCoordinator:
         self.active = current_a > 0
         self.last_action_reason = reason
 
+        # Fire HA events and manage persistent notifications
+        self._fire_events(prev_active, prev_current, reason)
+
         # Schedule charger action execution for state transitions
         if self._has_actions():
             self.hass.async_create_task(
@@ -339,6 +354,111 @@ class EvLoadBalancerCoordinator:
             )
 
         async_dispatcher_send(self.hass, self.signal_update)
+
+    # ------------------------------------------------------------------
+    # Event notifications and persistent notifications
+    # ------------------------------------------------------------------
+
+    @callback
+    def _fire_events(
+        self, prev_active: bool, prev_current: float, reason: str
+    ) -> None:
+        """Fire HA events and manage persistent notifications for notable conditions.
+
+        Notable conditions detected:
+        - Meter unavailable (stop mode): charging stopped due to meter loss.
+        - Fallback activated (set_current mode): fallback current applied.
+        - Overload stop: charging stopped due to household overload.
+        - Charging resumed: charging restarted after a stop.
+
+        Persistent notifications are created for fault conditions and
+        dismissed when the fault resolves (meter recovers or charging resumes).
+        """
+        entry_id = self.entry.entry_id
+
+        # --- Fault conditions ---
+
+        if reason == REASON_FALLBACK_UNAVAILABLE and self.current_set_a == 0.0:
+            # Meter unavailable — stop mode
+            self.hass.bus.async_fire(
+                EVENT_METER_UNAVAILABLE,
+                {"entry_id": entry_id, "power_meter_entity": self._power_meter_entity},
+            )
+            pn_async_create(
+                self.hass,
+                (
+                    f"Power meter `{self._power_meter_entity}` is unavailable. "
+                    "Charging has been stopped for safety."
+                ),
+                title="EV Load Balancer — Meter Unavailable",
+                notification_id=NOTIFICATION_METER_UNAVAILABLE_FMT.format(entry_id=entry_id),
+            )
+
+        elif reason == REASON_FALLBACK_UNAVAILABLE and self.current_set_a > 0:
+            # Fallback activated — set_current mode
+            self.hass.bus.async_fire(
+                EVENT_FALLBACK_ACTIVATED,
+                {
+                    "entry_id": entry_id,
+                    "power_meter_entity": self._power_meter_entity,
+                    "fallback_current_a": self.current_set_a,
+                },
+            )
+            pn_async_create(
+                self.hass,
+                (
+                    f"Power meter `{self._power_meter_entity}` is unavailable. "
+                    f"Fallback current of {self.current_set_a} A applied."
+                ),
+                title="EV Load Balancer — Fallback Activated",
+                notification_id=NOTIFICATION_FALLBACK_ACTIVATED_FMT.format(entry_id=entry_id),
+            )
+
+        elif reason == REASON_POWER_METER_UPDATE and prev_active and not self.active:
+            # Overload stop — household load exceeds service limit
+            self.hass.bus.async_fire(
+                EVENT_OVERLOAD_STOP,
+                {
+                    "entry_id": entry_id,
+                    "previous_current_a": prev_current,
+                    "available_current_a": self.available_current_a,
+                },
+            )
+            pn_async_create(
+                self.hass,
+                (
+                    "Household load exceeds the service limit. "
+                    f"Charging stopped (was {prev_current} A, "
+                    f"available headroom: {self.available_current_a} A)."
+                ),
+                title="EV Load Balancer — Overload",
+                notification_id=NOTIFICATION_OVERLOAD_STOP_FMT.format(entry_id=entry_id),
+            )
+
+        # --- Resolution conditions ---
+
+        if not prev_active and self.active:
+            # Charging resumed from a stopped state
+            self.hass.bus.async_fire(
+                EVENT_CHARGING_RESUMED,
+                {"entry_id": entry_id, "current_a": self.current_set_a},
+            )
+            # Dismiss overload notification when charging resumes
+            pn_async_dismiss(
+                self.hass,
+                NOTIFICATION_OVERLOAD_STOP_FMT.format(entry_id=entry_id),
+            )
+
+        if reason == REASON_POWER_METER_UPDATE:
+            # Meter recovered — dismiss meter/fallback fault notifications
+            pn_async_dismiss(
+                self.hass,
+                NOTIFICATION_METER_UNAVAILABLE_FMT.format(entry_id=entry_id),
+            )
+            pn_async_dismiss(
+                self.hass,
+                NOTIFICATION_FALLBACK_ACTIVATED_FMT.format(entry_id=entry_id),
+            )
 
     def _has_actions(self) -> bool:
         """Return True if any charger action script is configured."""
