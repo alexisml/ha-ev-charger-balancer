@@ -35,20 +35,20 @@ The version remains `0.1.0` as this is a pre-release stabilization milestone. A 
 
 After this PR, the test suite contains **171 tests** covering:
 
-| Test module | Tests | Coverage area |
-|---|---|---|
-| `test_config_flow.py` | 4 | Config flow creation, validation, defaults, single-instance guard |
-| `test_init.py` | 2 | Integration setup and unload |
-| `test_entities.py` | 16 | Device registration, unique IDs, initial values, set-value, toggle, unload |
-| `test_balancing_engine.py` | 17 | Target computation, overload, instant reduction, ramp-up, switch, unavailable modes |
-| `test_action_execution.py` | 10 | Action payloads, transitions, error handling, options flow |
-| `test_event_notifications.py` | 11 | HA events, persistent notifications, fault/resolution conditions |
-| `test_balancer_state.py` | 16 | State sensor transitions, meter health, fallback, configured fallback |
-| `test_logging.py` | 10 | Debug/info/warning log messages for all operational states |
-| `test_set_limit_service.py` | 10 | Service registration, clamping, actions, one-shot override, lifecycle |
-| `test_entity_initialization.py` | 13 | Entity defaults, state restoration from cache, coordinator sync, reload cycle |
-| `test_load_balancer.py` | 39 | Pure logic: available current, clamping, distribution, ramp-up |
-| `test_load_balancer.py` (extras) | 23 | Multi-charger distribution, step behavior, edge cases |
+| Test module | Coverage area |
+|---|---|
+| `test_config_flow.py` | Config flow creation, validation, defaults, single-instance guard |
+| `test_init.py` | Integration setup and unload |
+| `test_entities.py` | Device registration, unique IDs, initial values, set-value, toggle, unload |
+| `test_balancing_engine.py` | Target computation, overload, instant reduction, ramp-up, switch, unavailable modes |
+| `test_action_execution.py` | Action payloads, transitions, error handling, options flow |
+| `test_event_notifications.py` | HA events, persistent notifications, fault/resolution conditions |
+| `test_balancer_state.py` | State sensor transitions, meter health, fallback, configured fallback |
+| `test_logging.py` | Debug/info/warning log messages for all operational states |
+| `test_set_limit_service.py` | Service registration, clamping, actions, one-shot override, lifecycle |
+| `test_entity_initialization.py` | Entity defaults, state restoration from cache, coordinator sync, reload cycle |
+| `test_load_balancer.py` | Pure logic: available current, clamping, distribution, ramp-up |
+| `test_load_balancer.py` (extras) | Multi-charger distribution, step behavior, edge cases |
 
 ## Lessons learned
 
