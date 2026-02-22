@@ -180,6 +180,8 @@ class EvLbBalancerStateSensor(RestoreSensor):
         last = await self.async_get_last_sensor_data()
         if last and last.native_value is not None:
             self._attr_native_value = last.native_value
+        else:
+            self._attr_native_value = self._coordinator.balancer_state
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
@@ -223,6 +225,8 @@ class EvLbConfiguredFallbackSensor(RestoreSensor):
         last = await self.async_get_last_sensor_data()
         if last and last.native_value is not None:
             self._attr_native_value = last.native_value
+        else:
+            self._attr_native_value = self._coordinator.configured_fallback
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,

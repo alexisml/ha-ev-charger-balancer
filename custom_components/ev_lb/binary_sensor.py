@@ -99,6 +99,8 @@ class EvLbMeterStatusBinarySensor(BinarySensorEntity, RestoreEntity):
         last = await self.async_get_last_state()
         if last and last.state is not None:
             self._attr_is_on = last.state == "on"
+        else:
+            self._attr_is_on = self._coordinator.meter_healthy
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
@@ -142,6 +144,8 @@ class EvLbFallbackActiveBinarySensor(BinarySensorEntity, RestoreEntity):
         last = await self.async_get_last_state()
         if last and last.state is not None:
             self._attr_is_on = last.state == "on"
+        else:
+            self._attr_is_on = self._coordinator.fallback_active
         self.async_on_remove(
             async_dispatcher_connect(
                 self.hass,
