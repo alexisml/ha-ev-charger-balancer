@@ -33,8 +33,6 @@ _SENSOR_CURRENT_SET = "sensor.ev_charger_load_balancer_charging_current_set"
 _NUMBER_MAX_CHARGER = "number.ev_charger_load_balancer_max_charger_current"
 _NUMBER_MIN_EV = "number.ev_charger_load_balancer_min_ev_current"
 _BINARY_ACTIVE = "binary_sensor.ev_charger_load_balancer_load_balancing_active"
-_BINARY_METER = "binary_sensor.ev_charger_load_balancer_power_meter_status"
-_BINARY_FALLBACK = "binary_sensor.ev_charger_load_balancer_meter_fallback_active"
 
 
 # ---------------------------------------------------------------------------

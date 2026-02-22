@@ -13,7 +13,7 @@ PR-7-MVP is the final stabilization milestone before the integration can be inst
 ## What changed
 
 - **`custom_components/ev_lb/manifest.json`**: Fixed `documentation` and `issue_tracker` URLs — they pointed to `alexisml/ev-charger-load-balancing` instead of the correct `alexisml/ha-ev-charger-balancer`.
-- **`tests/test_entity_initialization.py`** (new): Added 12 tests covering entity defaults on fresh setup, state restoration from cache (sensor, number, switch), coordinator sync, and unload/reload cycle.
+- **`tests/test_entity_initialization.py`** (new): Added 13 tests covering entity defaults on fresh setup, state restoration from cache (sensor, number, switch, binary sensor), coordinator sync, and unload/reload cycle.
 - **`README.md`**: Updated status line from "working toward PR-7-MVP" to "PR-7-MVP complete; working toward PR-8-MVP: User manual".
 - **`docs/documentation/milestones/01-2026-02-19-mvp-plan.md`**: Marked PR-7-MVP as ✅ Done.
 
