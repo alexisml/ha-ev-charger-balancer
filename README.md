@@ -131,15 +131,18 @@ stateDiagram-v2
     STOPPED --> ADJUSTING : headroom ≥ min_ev_a
     ADJUSTING --> ACTIVE : same target next cycle
     ADJUSTING --> STOPPED : overload (target < min_ev_a)
+    ADJUSTING --> RAMP_UP_HOLD : increase needed but cooldown active
     ACTIVE --> ADJUSTING : target changed
     ACTIVE --> STOPPED : overload
     ACTIVE --> RAMP_UP_HOLD : increase needed but cooldown active
     RAMP_UP_HOLD --> ADJUSTING : cooldown elapsed
     RAMP_UP_HOLD --> STOPPED : overload
-    DISABLED --> STOPPED : switch turned on
+    DISABLED --> STOPPED : re-enabled (no headroom)
+    DISABLED --> ADJUSTING : re-enabled (with headroom)
     STOPPED --> DISABLED : switch turned off
     ACTIVE --> DISABLED : switch turned off
     ADJUSTING --> DISABLED : switch turned off
+    RAMP_UP_HOLD --> DISABLED : switch turned off
 ```
 
 ---
