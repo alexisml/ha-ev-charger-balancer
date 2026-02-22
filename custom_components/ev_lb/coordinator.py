@@ -166,8 +166,7 @@ class EvLoadBalancerCoordinator:
         meter_state = self.hass.states.get(self._power_meter_entity)
         if meter_state is None or meter_state.state in ("unavailable", "unknown"):
             self.meter_healthy = False
-            if self._unavailable_behavior == UNAVAILABLE_BEHAVIOR_SET_CURRENT:
-                self.fallback_active = True
+            self.fallback_active = True
 
     @callback
     def async_stop(self) -> None:
