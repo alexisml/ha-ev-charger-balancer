@@ -33,7 +33,7 @@ The version remains `0.1.0` as this is a pre-release stabilization milestone. A 
 
 ## Test coverage
 
-After this PR, the test suite contains **170 tests** covering:
+After this PR, the test suite contains **171 tests** covering:
 
 | Test module | Tests | Coverage area |
 |---|---|---|
@@ -46,7 +46,7 @@ After this PR, the test suite contains **170 tests** covering:
 | `test_balancer_state.py` | 16 | State sensor transitions, meter health, fallback, configured fallback |
 | `test_logging.py` | 10 | Debug/info/warning log messages for all operational states |
 | `test_set_limit_service.py` | 10 | Service registration, clamping, actions, one-shot override, lifecycle |
-| `test_entity_initialization.py` | 12 | Entity defaults, state restoration from cache, coordinator sync, reload cycle |
+| `test_entity_initialization.py` | 13 | Entity defaults, state restoration from cache, coordinator sync, reload cycle |
 | `test_load_balancer.py` | 39 | Pure logic: available current, clamping, distribution, ramp-up |
 | `test_load_balancer.py` (extras) | 23 | Multi-charger distribution, step behavior, edge cases |
 

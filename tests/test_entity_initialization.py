@@ -42,14 +42,21 @@ _BINARY_FALLBACK = "binary_sensor.ev_charger_load_balancer_meter_fallback_active
 # ---------------------------------------------------------------------------
 
 
-class TestSensorDefaults:
-    """Sensor entities use correct default values and sync with the coordinator on fresh setup."""
+class TestSensorDefaultsAndRestore:
+    """Sensor entities use correct default values, sync with the coordinator, and restore from cache."""
 
     async def test_current_set_defaults_to_zero(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
         """Coordinator initializes current_set to zero on fresh setup when no restore data is available."""
         await setup_integration(hass, mock_config_entry)
+
+        current_set_id = get_entity_id(
+            hass, mock_config_entry, "sensor", "current_set"
+        )
+        state = hass.states.get(current_set_id)
+        assert state is not None
+        assert float(state.state) == 0.0
 
         coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
         assert coordinator.current_set_a == 0.0
@@ -219,7 +226,7 @@ class TestSwitchDefaultsAndSync:
 
 
 class TestBinarySensorDefaults:
-    """Binary sensor entities use expected default states on a fresh install."""
+    """Binary sensor entities use expected default states on a fresh install and restore from cache."""
 
     async def test_active_binary_sensor_defaults_off(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
@@ -256,6 +263,23 @@ class TestBinarySensorDefaults:
         )
         state = hass.states.get(fallback_id)
         assert state.state == "off"
+
+    async def test_active_binary_sensor_restores_on_state(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Active binary sensor restores its previous state after a restart."""
+        mock_restore_cache(
+            hass,
+            [State(_BINARY_ACTIVE, "on")],
+        )
+        await setup_integration(hass, mock_config_entry)
+
+        active_id = get_entity_id(
+            hass, mock_config_entry, "binary_sensor", "active"
+        )
+        state = hass.states.get(active_id)
+        assert state is not None
+        assert state.state == "on"
 
 
 # ---------------------------------------------------------------------------
