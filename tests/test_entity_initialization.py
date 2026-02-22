@@ -23,7 +23,15 @@ from pytest_homeassistant_custom_component.common import (
     mock_restore_cache_with_extra_data,
 )
 
-from custom_components.ev_lb.const import DOMAIN
+from custom_components.ev_lb.const import (
+    DEFAULT_MAX_CHARGER_CURRENT,
+    DEFAULT_MIN_EV_CURRENT,
+    DOMAIN,
+    MAX_CHARGER_CURRENT,
+    MIN_CHARGER_CURRENT,
+    MIN_EV_CURRENT_MAX,
+    MIN_EV_CURRENT_MIN,
+)
 from conftest import setup_integration, get_entity_id
 
 # Entity IDs are deterministic: derived from the device name
@@ -100,7 +108,7 @@ class TestNumberDefaultsAndSync:
         await setup_integration(hass, mock_config_entry)
 
         coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
-        assert coordinator.max_charger_current == 32.0
+        assert coordinator.max_charger_current == DEFAULT_MAX_CHARGER_CURRENT
 
     async def test_min_ev_current_syncs_to_coordinator_on_fresh_setup(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
@@ -109,7 +117,7 @@ class TestNumberDefaultsAndSync:
         await setup_integration(hass, mock_config_entry)
 
         coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
-        assert coordinator.min_ev_current == 6.0
+        assert coordinator.min_ev_current == DEFAULT_MIN_EV_CURRENT
 
     async def test_max_charger_current_restores_from_cache(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
@@ -121,8 +129,8 @@ class TestNumberDefaultsAndSync:
                 (
                     State(_NUMBER_MAX_CHARGER, "25.0"),
                     {
-                        "native_max_value": 80.0,
-                        "native_min_value": 1.0,
+                        "native_max_value": MAX_CHARGER_CURRENT,
+                        "native_min_value": MIN_CHARGER_CURRENT,
                         "native_step": 1.0,
                         "native_unit_of_measurement": "A",
                         "native_value": 25.0,
@@ -152,8 +160,8 @@ class TestNumberDefaultsAndSync:
                 (
                     State(_NUMBER_MIN_EV, "8.0"),
                     {
-                        "native_max_value": 32.0,
-                        "native_min_value": 1.0,
+                        "native_max_value": MIN_EV_CURRENT_MAX,
+                        "native_min_value": MIN_EV_CURRENT_MIN,
                         "native_step": 1.0,
                         "native_unit_of_measurement": "A",
                         "native_value": 8.0,
