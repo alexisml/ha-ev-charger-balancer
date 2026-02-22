@@ -55,7 +55,12 @@ def _register_services(hass: HomeAssistant) -> None:
         In the current single-charger architecture there is exactly one.
         """
         current_a = call.data["current_a"]
-        _LOGGER.debug("Service %s.%s called with current_a=%.1f", DOMAIN, SERVICE_SET_LIMIT, current_a)
+        _LOGGER.debug(
+            "Service %s.%s called with current_a=%.1f",
+            DOMAIN,
+            SERVICE_SET_LIMIT,
+            current_a,
+        )
         for entry_data in hass.data[DOMAIN].values():
             coordinator: EvLoadBalancerCoordinator = entry_data["coordinator"]
             coordinator.manual_set_limit(current_a)

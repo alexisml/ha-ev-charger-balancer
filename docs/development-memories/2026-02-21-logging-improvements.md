@@ -1,9 +1,9 @@
-# Logging Improvements
-
-- **Date:** 2026-02-21
-- **Author:** Copilot
-- **Status:** Complete
-- **Summary:** Structured logging across the integration to support runtime debugging without overloading Home Assistant logs. Added a logging wrapper, balancer state sensor, and user documentation.
+Title: Logging Improvements
+Date: 2026-02-21
+Author: Copilot
+Status: Complete
+Summary: Structured logging across the integration to support runtime debugging without overloading Home Assistant logs. Added a logging wrapper, balancer state sensor, and user documentation.
+---
 
 ## Problem
 

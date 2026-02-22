@@ -162,6 +162,13 @@ class EvLoadBalancerCoordinator:
             self._unavailable_behavior,
         )
 
+        # Sync meter health flags if meter is already unavailable at startup
+        meter_state = self.hass.states.get(self._power_meter_entity)
+        if meter_state is None or meter_state.state in ("unavailable", "unknown"):
+            self.meter_healthy = False
+            if self._unavailable_behavior == UNAVAILABLE_BEHAVIOR_SET_CURRENT:
+                self.fallback_active = True
+
     @callback
     def async_stop(self) -> None:
         """Stop listening and clean up."""
@@ -228,6 +235,8 @@ class EvLoadBalancerCoordinator:
                 "Parameter changed but power meter is %s — skipping recompute",
                 state.state if state else "missing",
             )
+            self.meter_healthy = False
+            async_dispatcher_send(self.hass, self.signal_update)
             return
 
         try:
