@@ -15,6 +15,7 @@ Covers:
 - ev_charging sensor stays on when status sensor is unavailable/unknown
 - ev_charging sensor is always on when no status sensor is configured
 - coordinator.ev_charging attribute is updated correctly on each recompute
+- ev_charging diagnostic updates immediately on status change (no meter event needed)
 """
 
 from homeassistant.core import HomeAssistant
@@ -416,3 +417,86 @@ class TestThrottledEvFix:
         hass.states.async_set(POWER_METER, "2001")
         await hass.async_block_till_done()
         assert coordinator.ev_charging is False
+
+
+class TestChargerStatusSensorSubscription:
+    """Verify the coordinator subscribes to charger status sensor state changes.
+
+    The ev_charging diagnostic must update whenever the charger status sensor
+    changes — not only when a power-meter event triggers a recompute.  This
+    ensures the diagnostic reflects the actual charger state in real time, even
+    when the power meter has not yet reported the load change caused by the EV
+    stopping or starting.
+    """
+
+    async def test_ev_charging_updates_without_meter_event_when_status_changes(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The diagnostic reflects the actual charger state immediately when the charger stops or starts delivering power.
+
+        When the charger stops delivering power (e.g. SuspendedEVSE), the
+        operator must see the ev_charging diagnostic turn off straight away —
+        not after the next slow power-meter reading — so the dashboard accurately
+        represents what the EV is doing.  The reverse is also true: when the
+        charger resumes, the diagnostic turns on immediately.
+        """
+        status_entity = "sensor.teison_mini_status_connector"
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={
+                CONF_POWER_METER_ENTITY: POWER_METER,
+                CONF_VOLTAGE: 230.0,
+                CONF_MAX_SERVICE_CURRENT: 32.0,
+                CONF_CHARGER_STATUS_ENTITY: status_entity,
+            },
+            title="EV Load Balancing",
+        )
+        hass.states.async_set(POWER_METER, "0")
+        hass.states.async_set(status_entity, "Charging")
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        ev_charging_id = get_entity_id(hass, entry, "binary_sensor", "ev_charging")
+
+        # Establish baseline: meter fires once so ev_charging is set from status sensor
+        hass.states.async_set(POWER_METER, "1000")
+        await hass.async_block_till_done()
+        assert hass.states.get(ev_charging_id).state == "on"
+
+        # Charger transitions to SuspendedEVSE — NO new meter event
+        # ev_charging must turn off immediately via the status subscription
+        hass.states.async_set(status_entity, "SuspendedEVSE")
+        await hass.async_block_till_done()
+        assert hass.states.get(ev_charging_id).state == "off"
+
+        # Charger resumes charging — NO new meter event
+        # ev_charging must turn on immediately
+        hass.states.async_set(status_entity, "Charging")
+        await hass.async_block_till_done()
+        assert hass.states.get(ev_charging_id).state == "on"
+
+    async def test_ev_charging_diagnostic_does_not_update_without_configured_sensor(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """The diagnostic remains stable and is not affected by unrelated entity state changes when no charger status sensor is configured.
+
+        When no charger status sensor is configured, the operator always sees
+        ev_charging as on — the integration has no external signal to trigger a
+        change, so unrelated sensor activity must never flip the diagnostic off.
+        """
+        await setup_integration(hass, mock_config_entry)
+
+        ev_charging_id = get_entity_id(
+            hass, mock_config_entry, "binary_sensor", "ev_charging"
+        )
+
+        # Trigger a meter event so ev_charging is initialised
+        hass.states.async_set(POWER_METER, "1000")
+        await hass.async_block_till_done()
+        assert hass.states.get(ev_charging_id).state == "on"
+
+        # Changing some unrelated entity must not affect ev_charging
+        hass.states.async_set("sensor.some_other_entity", "SuspendedEVSE")
+        await hass.async_block_till_done()
+        assert hass.states.get(ev_charging_id).state == "on"
