@@ -32,6 +32,15 @@ CONF_ACTION_START_CHARGING = "action_start_charging"
 CONF_CHARGER_STATUS_ENTITY = "charger_status_entity"
 CHARGING_STATE_VALUE = "Charging"
 
+# Multi-charger support
+CONF_CHARGERS = "chargers"              # list of per-charger config dicts
+CONF_CHARGER_PRIORITY = "priority"      # per-charger priority weight (5–100, step 5)
+DEFAULT_CHARGER_PRIORITY = 50
+MIN_CHARGER_PRIORITY = 5
+MAX_CHARGER_PRIORITY = 100
+CHARGER_PRIORITY_STEP = 5
+MAX_CHARGERS = 3                        # maximum chargers per power meter (UI cap)
+
 # Unavailable behavior options
 UNAVAILABLE_BEHAVIOR_STOP = "stop"
 UNAVAILABLE_BEHAVIOR_IGNORE = "ignore"

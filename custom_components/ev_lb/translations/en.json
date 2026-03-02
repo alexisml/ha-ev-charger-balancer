@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "EV Charger Load Balancing",
-        "description": "Configure the power meter and electrical service parameters. This integration currently supports one charger. Multi-charger support is planned for a future release.",
+        "description": "Configure the power meter and electrical service parameters. This integration supports up to 3 chargers per power meter with configurable priorities.",
         "data": {
           "power_meter_entity": "Power meter sensor",
           "voltage": "Supply voltage",
@@ -36,7 +36,7 @@
     "step": {
       "init": {
         "title": "EV Charger Load Balancing Settings",
-        "description": "Update the integration settings. The power meter sensor cannot be changed after initial setup.",
+        "description": "Update the integration settings. The power meter sensor cannot be changed after initial setup. Enable 'Configure multiple chargers' to set up priority-based balancing across 2–3 chargers.",
         "data": {
           "voltage": "Supply voltage",
           "max_service_current": "Max service current (breaker rating)",
@@ -45,7 +45,8 @@
           "action_set_current": "Set current action (script)",
           "action_stop_charging": "Stop charging action (script)",
           "action_start_charging": "Start charging action (script)",
-          "charger_status_entity": "Charger status sensor (optional)"
+          "charger_status_entity": "Charger status sensor (optional)",
+          "manage_chargers": "Configure multiple chargers (advanced)"
         },
         "data_description": {
           "voltage": "Nominal supply voltage in Volts (used to convert W ↔ A).",
@@ -55,7 +56,54 @@
           "action_set_current": "Script entity called to set the charging current. Receives 'current_a' (float, amps), 'current_w' (float, watts), and 'charger_id' (string) variables.",
           "action_stop_charging": "Script entity called to stop charging. Receives a 'charger_id' (string) variable.",
           "action_start_charging": "Script entity called to start/resume charging. Receives a 'charger_id' (string) variable.",
-          "charger_status_entity": "Sensor whose state equals 'Charging' when the EV is actively charging (e.g. from the OCPP integration). When set, the balancer uses this to avoid over-subtracting headroom while the charger is idle or finished."
+          "charger_status_entity": "Sensor whose state equals 'Charging' when the EV is actively charging (e.g. from the OCPP integration). When set, the balancer uses this to avoid over-subtracting headroom while the charger is idle or finished.",
+          "manage_chargers": "Enable to configure 2–3 chargers with individual priority weights. When enabled, global settings are saved first and you will be guided through per-charger configuration."
+        }
+      },
+      "charger_1": {
+        "title": "Charger 1 Configuration",
+        "description": "Configure action scripts, status sensor, and priority for the first charger. Priority controls how available current is distributed when multiple chargers compete for headroom.",
+        "data": {
+          "action_set_current": "Set current action (script)",
+          "action_stop_charging": "Stop charging action (script)",
+          "action_start_charging": "Start charging action (script)",
+          "charger_status_entity": "Charger status sensor (optional)",
+          "priority": "Priority (higher = more current)",
+          "add_another_charger": "Add a second charger?"
+        },
+        "data_description": {
+          "priority": "Priority weight for this charger (5–100, step 5). Higher values receive proportionally more available current. Equal priorities result in equal distribution.",
+          "add_another_charger": "Enable to configure a second charger with its own priority."
+        }
+      },
+      "charger_2": {
+        "title": "Charger 2 Configuration",
+        "description": "Configure action scripts, status sensor, and priority for the second charger.",
+        "data": {
+          "action_set_current": "Set current action (script)",
+          "action_stop_charging": "Stop charging action (script)",
+          "action_start_charging": "Start charging action (script)",
+          "charger_status_entity": "Charger status sensor (optional)",
+          "priority": "Priority (higher = more current)",
+          "add_another_charger": "Add a third charger?"
+        },
+        "data_description": {
+          "priority": "Priority weight for this charger (5–100, step 5). Higher values receive proportionally more available current. Equal priorities result in equal distribution.",
+          "add_another_charger": "Enable to configure a third charger with its own priority."
+        }
+      },
+      "charger_3": {
+        "title": "Charger 3 Configuration",
+        "description": "Configure action scripts, status sensor, and priority for the third charger.",
+        "data": {
+          "action_set_current": "Set current action (script)",
+          "action_stop_charging": "Stop charging action (script)",
+          "action_start_charging": "Start charging action (script)",
+          "charger_status_entity": "Charger status sensor (optional)",
+          "priority": "Priority (higher = more current)"
+        },
+        "data_description": {
+          "priority": "Priority weight for this charger (5–100, step 5). Higher values receive proportionally more available current. Equal priorities result in equal distribution."
         }
       }
     }

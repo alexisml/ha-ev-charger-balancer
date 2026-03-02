@@ -8,7 +8,8 @@ Functions:
     compute_available_current   — max EV current given a non-EV power draw
     compute_target_current      — full single-charger target from service meter (amps)
     clamp_current               — per-charger min/max/step clamping
-    distribute_current          — water-filling distribution across N chargers
+    distribute_current          — equal water-filling distribution across N chargers
+    distribute_current_weighted — weighted water-filling distribution across N chargers
     apply_ramp_up_limit         — cooldown before allowing current increase
     clamp_to_safe_output        — defense-in-depth output safety clamp
     resolve_balancer_state      — operational state string from balancer conditions
@@ -247,6 +248,92 @@ def distribute_current(
         remaining = _settle_capped_and_below_min(
             capped, below_min, chargers, step_a, active, allocations, remaining
         )
+
+    return allocations
+
+
+def distribute_current_weighted(
+    available_a: float,
+    chargers: list[tuple[float, float, float]],
+    step_a: float = STEP_DEFAULT,
+) -> list[Optional[float]]:
+    """Distribute *available_a* across chargers proportionally to per-charger weights.
+
+    Uses an iterative weighted water-filling algorithm:
+
+    1.  Compute each active charger's proportional share based on its weight.
+    2.  Chargers whose weighted share reaches or exceeds their maximum are capped
+        at that maximum; surplus is returned to the remaining pool.
+    3.  Chargers whose weighted share falls below their minimum are stopped
+        (allocated ``None``); their share is returned to the pool and weights
+        are re-normalised over the remaining active chargers.
+    4.  Repeat until no charger changes state, then assign final shares.
+
+    When all weights are equal this produces the same result as
+    :func:`distribute_current`.
+
+    Args:
+        available_a:  Total current available for EV charging in Amps.
+        chargers:     List of ``(min_a, max_a, weight)`` tuples, one per charger.
+                      Weights are relative — only proportions matter (e.g.
+                      ``50, 50`` and ``1, 1`` both mean equal share).
+        step_a:       Current resolution in Amps (default 1 A).
+
+    Returns:
+        List of target currents (Amps) aligned with *chargers*.  A value of
+        ``None`` means the charger should be stopped.
+    """
+    n = len(chargers)
+    if n == 0:
+        return []
+
+    allocations: list[Optional[float]] = [None] * n
+    active: list[int] = list(range(n))
+    remaining: float = available_a
+
+    while active:
+        total_weight = sum(chargers[i][2] for i in active)
+        if total_weight <= 0:
+            # All weights are zero or negative — fall back to equal distribution
+            total_weight = float(len(active))
+            shares = {i: remaining / len(active) for i in active}
+        else:
+            shares = {
+                i: remaining * (chargers[i][2] / total_weight) for i in active
+            }
+
+        capped: list[int] = []
+        below_min: list[int] = []
+        for i in active:
+            min_a, max_a, _ = chargers[i]
+            max_floored = (max_a // step_a) * step_a
+            target = (min(shares[i], max_a) // step_a) * step_a
+            if target >= max_floored:
+                capped.append(i)
+            elif target < min_a:
+                below_min.append(i)
+
+        if not capped and not below_min:
+            # Stable — assign final weighted shares
+            for i in active:
+                min_a, _, _ = chargers[i]
+                target = (shares[i] // step_a) * step_a
+                allocations[i] = target if target >= min_a else None
+            break
+
+        for i in capped:
+            max_floored = (chargers[i][1] // step_a) * step_a
+            min_a = chargers[i][0]
+            if max_floored >= min_a:
+                allocations[i] = max_floored
+                remaining -= max_floored
+            else:
+                allocations[i] = None
+            active.remove(i)
+
+        for i in below_min:
+            allocations[i] = None
+            active.remove(i)
 
     return allocations
 
