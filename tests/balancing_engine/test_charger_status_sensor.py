@@ -437,7 +437,8 @@ class TestChargerStatusSensorSubscription:
     async def test_ev_charging_updates_without_meter_event_when_status_changes(
         self, hass: HomeAssistant
     ) -> None:
-        """The diagnostic reflects the actual charger state immediately when the charger stops or starts delivering power.
+        """The diagnostic reflects the actual charger state immediately when the charger stops or starts
+        delivering power.
 
         When the charger stops delivering power (e.g. SuspendedEVSE), the
         operator must see the ev_charging diagnostic turn off straight away —
@@ -484,7 +485,8 @@ class TestChargerStatusSensorSubscription:
     async def test_ev_charging_diagnostic_does_not_update_without_configured_sensor(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """The diagnostic remains stable and is not affected by unrelated entity state changes when no charger status sensor is configured.
+        """The diagnostic remains stable and is not affected by unrelated entity state changes
+        when no charger status sensor is configured.
 
         When no charger status sensor is configured, the operator always sees
         ev_charging as on — the integration has no external signal to trigger a
@@ -602,7 +604,8 @@ class TestChargerStatusBootPath:
     async def test_ev_charging_off_at_ha_boot_healthy_meter_suspended_charger(
         self, hass: HomeAssistant
     ) -> None:
-        """The ev_charging diagnostic is off immediately after HA completes startup when the charger is already suspended.
+        """The ev_charging diagnostic is off immediately after HA completes startup when the charger
+        is already suspended.
 
         When HA finishes starting with the charger already in SuspendedEVSE and
         the power meter reporting a valid reading, the operator must see ev_charging
@@ -633,7 +636,8 @@ class TestChargerStatusBootPath:
     async def test_ev_charging_off_at_ha_boot_unavailable_meter_suspended_charger(
         self, hass: HomeAssistant
     ) -> None:
-        """The ev_charging diagnostic shows off after HA startup when the power meter is unavailable and the charger is suspended.
+        """The ev_charging diagnostic shows off after HA startup when the power meter is unavailable
+        and the charger is suspended.
 
         When HA finishes starting with the power meter unavailable and the charger
         already in SuspendedEVSE, the operator must see ev_charging as off — the
