@@ -216,18 +216,27 @@ class EvLoadBalancerCoordinator:
 
         if self.hass.is_running:
             # Integration was loaded after HA finished starting (e.g., added
-            # via the UI or reloaded).  The state-change listener above will
-            # pick up the next meter event; if the meter is unavailable right
-            # now we apply the fallback immediately.  When the meter IS
-            # healthy we intentionally do NOT recompute here — the coordinator
-            # outputs 0 A until the next meter state-change triggers a real
-            # calculation, keeping the same safe-start contract as the boot
-            # path (no charging until a fresh reading arrives).
+            # via the UI or reloaded).  Initialize ev_charging from the current
+            # charger status state immediately so the diagnostic is accurate
+            # from the first moment without waiting for the next meter or
+            # status-change event.
+            self.ev_charging = self._is_ev_charging()
+
+            # The state-change listener above will pick up the next meter
+            # event; if the meter is unavailable right now we apply the
+            # fallback immediately.  When the meter IS healthy we intentionally
+            # do NOT recompute here — the coordinator outputs 0 A until the
+            # next meter state-change triggers a real calculation, keeping the
+            # same safe-start contract as the boot path (no charging until a
+            # fresh reading arrives).  We still dispatch once so that entities
+            # already subscribed reflect the ev_charging value we just set.
             meter_state = self.hass.states.get(self._power_meter_entity)
             if meter_state is None or meter_state.state in ("unavailable", "unknown"):
                 self.meter_healthy = False
                 self.fallback_active = True
                 self._apply_fallback_current()
+            else:
+                async_dispatcher_send(self.hass, self.signal_update)
         else:
             # HA is still loading — dependent integrations may not have
             # registered their entities yet, so a missing or unavailable meter
@@ -272,6 +281,12 @@ class EvLoadBalancerCoordinator:
         if self._unsub_listener is None:
             # Coordinator was stopped before HA finished starting — nothing to do
             return
+
+        # Initialize ev_charging from the current charger status state now that
+        # all integrations have loaded.  The healthy-meter path overwrites this
+        # inside _recompute(); setting it here ensures the correct value is
+        # dispatched even in the unavailable-meter fallback path.
+        self.ev_charging = self._is_ev_charging()
 
         meter_state = self.hass.states.get(self._power_meter_entity)
         if meter_state is None or meter_state.state in ("unavailable", "unknown"):
