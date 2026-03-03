@@ -66,10 +66,10 @@
           "add_another_charger": "Activa para configurar otro cargador con su propia prioridad."
         }
       }
+    },
+    "error": {
+      "duplicate_charger_status": "Este sensor de estado ya está siendo utilizado por otro cargador (en esta u otra instancia del balanceador). Por favor, selecciona un sensor diferente."
     }
-  },
-  "error": {
-    "duplicate_charger_status": "Este sensor de estado ya está siendo utilizado por otro cargador (en esta u otra instancia del balanceador). Por favor, selecciona un sensor diferente."
   },
   "entity": {
     "sensor": {

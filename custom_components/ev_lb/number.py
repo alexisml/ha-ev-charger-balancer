@@ -294,10 +294,15 @@ class EvLbChargerPriorityNumber(RestoreNumber):
         last = await self.async_get_last_number_data()
         if last and last.native_value is not None:
             self._attr_native_value = last.native_value
-        # Update the coordinator priority directly without triggering a recompute —
-        # the coordinator is already initialised from config at startup; we only
-        # need to apply any restored override value silently.
-        if 0 <= self._charger_index < len(self._coordinator._chargers):
+        # Apply the (possibly restored) priority via the coordinator.
+        if last and last.native_value is not None:
+            # A previously saved value was restored; it may differ from the
+            # config-derived default, so recompute allocations immediately.
+            self._coordinator.async_set_charger_priority(
+                self._charger_index, float(self._attr_native_value)
+            )
+        elif 0 <= self._charger_index < len(self._coordinator._chargers):
+            # No stored state — sync coordinator silently with the config default.
             self._coordinator._chargers[self._charger_index].priority = float(
                 self._attr_native_value
             )

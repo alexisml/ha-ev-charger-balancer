@@ -249,12 +249,13 @@ You have two chargers at equal priority (50/50). You want to charge your work ca
 
 ## Per-charger entities
 
-Each configured charger gets its own set of entities in the device card:
+Each configured charger gets a priority number entity in the device card:
 
 | Entity | What it shows |
 |---|---|
-| `sensor.*_charger_N_current_set` | Current being commanded to charger N right now |
 | `number.*_charger_N_priority` | Priority weight (0–100, step 5) — adjustable at runtime |
+
+> **Note:** Per-charger `sensor.*_charger_N_current_set` entities are not yet exposed. Each charger's commanded current is tracked internally and executed via its configured action scripts. A global `sensor.*_current_set` (the aggregate total across all chargers) is available via the standard entity list.
 
 Global entities (one per integration instance) remain the same as for single-charger setups — see [How It Works — Entities reference](02-how-it-works.md#entities-reference).
 

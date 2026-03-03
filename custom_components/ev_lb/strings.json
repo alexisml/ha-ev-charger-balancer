@@ -69,10 +69,10 @@
           "add_another_charger": "Enable to configure another charger with its own priority."
         }
       }
+    },
+    "error": {
+      "duplicate_charger_status": "This status sensor is already used by another charger (in this or another load balancer instance). Please select a different sensor."
     }
-  },
-  "error": {
-    "duplicate_charger_status": "This status sensor is already used by another charger (in this or another load balancer instance). Please select a different sensor."
   },
   "entity": {
     "sensor": {
@@ -139,6 +139,9 @@
       },
       "overload_loop_interval": {
         "name": "Overload correction interval"
+      },
+      "charger_priority": {
+        "name": "Charger {charger_num} priority"
       }
     },
     "switch": {

@@ -87,8 +87,8 @@ class _ChargerState:
     """Runtime configuration and mutable state for a single EV charger.
 
     Encapsulates per-charger action scripts, status sensor, priority weight,
-    and runtime tracking fields (last commanded current, ramp-up cooldown,
-    action task handle).
+    and runtime tracking fields (last commanded current, charging state flags,
+    and last reduction timestamp used for ramp-up limiting).
     """
 
     __slots__ = (
@@ -876,8 +876,9 @@ class EvLoadBalancerCoordinator:
 
         When *per_charger_finals* is provided (multi-charger recompute path),
         per-charger state is updated before scheduling actions.  When absent
-        (fallback / manual override paths), the same *current_a* is applied
-        to charger 0 and proportionally to others based on their last share.
+        (fallback / manual override paths), *current_a* is a per-charger value
+        supplied by the caller (already clamped to charger limits) and is
+        applied identically to every charger.
 
         A defense-in-depth safety clamp ensures the output never exceeds
         the service or charger limits, even if upstream logic has a bug.
