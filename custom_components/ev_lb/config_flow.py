@@ -212,12 +212,16 @@ _CONF_ADD_ANOTHER = "add_another_charger"
 def _charger_schema(
     defaults: dict[str, Any],
     add_another_option: bool,
+    add_another_default: bool = False,
 ) -> vol.Schema:
     """Return the voluptuous schema for one charger configuration step.
 
     Args:
-        defaults:           Pre-fill values (empty dict for a blank form).
-        add_another_option: When True, include the "add another charger?" field.
+        defaults:            Pre-fill values (empty dict for a blank form).
+        add_another_option:  When True, include the "add another charger?" field.
+        add_another_default: Default value for the "add another charger?" toggle.
+                             Set to True when a next charger already exists so
+                             re-opening the options flow preserves all chargers.
     """
     fields: dict[Any, Any] = {
         vol.Optional(
@@ -242,7 +246,7 @@ def _charger_schema(
         ): _PRIORITY_SELECTOR,
     }
     if add_another_option:
-        fields[vol.Optional(_CONF_ADD_ANOTHER, default=False)] = BooleanSelector()
+        fields[vol.Optional(_CONF_ADD_ANOTHER, default=add_another_default)] = BooleanSelector()
     return vol.Schema(fields)
 
 
@@ -413,11 +417,18 @@ class EvLbOptionsFlow(OptionsFlow):
         else:
             defaults = self._existing_charger_defaults(self._current_charger_idx)
 
+        # Default "add another charger" to True when a next charger already exists,
+        # so re-opening the options flow preserves all configured chargers.
+        current = {**self.config_entry.data, **self.config_entry.options}
+        existing_chargers = current.get(CONF_CHARGERS) or []
+        add_another_default = self._current_charger_idx + 1 < len(existing_chargers)
+
         return self.async_show_form(
             step_id="charger",
             data_schema=_charger_schema(
                 defaults,
                 add_another_option=charger_num < MAX_CHARGERS,
+                add_another_default=add_another_default,
             ),
             errors=errors,
             description_placeholders={"charger_num": str(charger_num)},

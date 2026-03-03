@@ -918,12 +918,14 @@ class EvLoadBalancerCoordinator:
         # otherwise distribute current_a to each charger (fallback / manual).
         if per_charger_finals is not None:
             for charger, final_i in zip(self._chargers, per_charger_finals):
-                charger.active = final_i > 0
-                charger.current_set_a = final_i
+                # Defense in depth: clamp each per-charger current to the safe range.
+                clamped_i = min(max(final_i, 0.0), self.max_charger_current)
+                charger.active = clamped_i > 0
+                charger.current_set_a = clamped_i
         else:
             # Fallback / manual path: current_a is a per-charger value (already clamped
             # by the caller); apply the same current to every charger.
-            per_charger_value = current_a
+            per_charger_value = min(max(current_a, 0.0), self.max_charger_current)
             for charger in self._chargers:
                 charger.active = per_charger_value > 0
                 charger.current_set_a = per_charger_value
