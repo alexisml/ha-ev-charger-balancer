@@ -35,14 +35,16 @@ ha-ev-charger-balancer/
 │   └── ...                      # Integration/e2e tests
 ├── docs/
 │   ├── documentation/           # User-facing documentation
-│   │   ├── user-manual.md       # Documentation index
-│   │   ├── installation-and-setup.md
-│   │   ├── how-it-works.md
-│   │   ├── troubleshooting-and-debugging.md
-│   │   ├── action-scripts-guide.md
-│   │   ├── event-notifications-guide.md
-│   │   ├── logging-guide.md
-│   │   └── milestones/          # MVP plan, multi-charger plan
+│   │   ├── user-manual.md                  # Documentation index
+│   │   ├── 01-installation-and-setup.md
+│   │   ├── 02-how-it-works.md
+│   │   ├── 03-multi-charger-guide.md
+│   │   ├── 04-action-scripts-guide.md
+│   │   ├── 05-event-notifications-guide.md
+│   │   ├── 06-logging-guide.md
+│   │   ├── 07-troubleshooting-and-debugging.md
+│   │   ├── 08-development-guide.md
+│   │   └── milestones/                     # MVP plan, multi-charger plan
 │   └── development-memories/    # Development artifacts (research, decisions, PR notes)
 ├── .github/                     # GitHub Actions workflows, dependabot, templates
 ├── pyproject.toml               # Ruff and codespell config

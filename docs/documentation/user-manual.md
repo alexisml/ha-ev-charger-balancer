@@ -8,23 +8,22 @@ This integration dynamically adjusts your EV charger's charging current based on
 
 ## Documentation sections
 
+| # | Guide | Description |
+|---|---|---|
+| 01 | [**Installation & Setup**](01-installation-and-setup.md) | How to install the integration, configure it step-by-step, and get your first charger running. |
+| 02 | [**How It Works**](02-how-it-works.md) | What the integration does, what to expect, what NOT to expect, entities reference, and the balancing algorithm in detail. |
+| 03 | [**Multi-Charger Load Balancing**](03-multi-charger-guide.md) | Running 1–N chargers on one circuit with weighted priority distribution, worked examples, and runtime priority adjustment. |
+| 04 | [**Action Scripts Guide**](04-action-scripts-guide.md) | Full reference for configuring charger action scripts (set current, stop, start) with examples for OCPP, REST, Modbus, and switch-based chargers. |
+| 05 | [**Event Notifications Guide**](05-event-notifications-guide.md) | All event types, payloads, persistent notifications, and automation examples for mobile alerts. |
+| 06 | [**Logging Guide**](06-logging-guide.md) | Debug log setup, log level policy, example output, and the logging wrapper architecture. |
+| 07 | [**Troubleshooting & Debugging**](07-troubleshooting-and-debugging.md) | Common problems and their solutions, how to read logs, diagnostic sensors, and how to report issues. |
+| 08 | [**Development Guide**](08-development-guide.md) | Architecture overview, running CI checks locally, contributing guidelines, and project roadmap. |
+
+## Quick reference
+
 | Guide | Description |
 |---|---|
-| [**Installation & Setup**](installation-and-setup.md) | How to install the integration, configure it step-by-step, and get your first charger running. |
-| [**How It Works**](how-it-works.md) | What the integration does, what to expect, what NOT to expect, entities reference, and the balancing algorithm in detail. |
-| [**Troubleshooting & Debugging**](troubleshooting-and-debugging.md) | Common problems and their solutions, how to read logs, diagnostic sensors, and how to report issues. |
-| [**Development Guide**](development-guide.md) | Architecture overview, running CI checks locally, contributing guidelines, and project roadmap. |
-
-## Individual reference guides
-
-These focused guides provide deep-dive reference material for specific features:
-
-| Guide | Description |
-|---|---|
-| [Action Scripts Guide](action-scripts-guide.md) | Full reference for configuring charger action scripts (set current, stop, start) with examples for OCPP, REST, Modbus, and switch-based chargers. |
 | [Starter Script Templates](../examples/) | Ready-to-use YAML templates — copy, adjust, and use. |
-| [Event Notifications Guide](event-notifications-guide.md) | All event types, payloads, persistent notifications, and automation examples for mobile alerts. |
-| [Logging Guide](logging-guide.md) | Debug log setup, log level policy, example output, and the logging wrapper architecture. |
 
 ---
 
