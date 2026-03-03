@@ -465,10 +465,52 @@ class TestDistributeCurrentWeightedStopConditions:
         assert result[1] is None
 
     def test_both_chargers_stopped_when_share_below_min_for_both(self):
-        """All chargers stop when even the highest-weighted share falls below every charger's minimum."""
-        # Available: 8 A; 2 chargers min=6 A; fair share = 4 A < 6 A → both stop
+        """Highest-priority charger takes all headroom when proportional split leaves all below minimum."""
+        # Available: 8 A; 2 equal-weight chargers min=6 A
+        # Proportional share = 4 A each < 6 A → tie-break: A (index 0) first
+        # A: 8 A remaining ≥ 6 A min → keep A; B: 2 A < 6 A → stop B
+        # Round 2: A alone, A gets 8 A
         result = distribute_current_weighted(
             available_a=8.0, chargers=[(6.0, 32.0, 50), (6.0, 32.0, 50)]
+        )
+        assert result[0] == 8.0
+        assert result[1] is None
+
+    def test_priority_tiebreak_equal_weights_11a(self):
+        """Highest-priority charger takes all headroom when proportional split leaves all below minimum."""
+        # 11 A, min 6 A, equal weights → proportional = 5.5 A each < 6 A min
+        # Tie-break: A (index 0) keeps 11 A; 5 A left < 6 A min for B → B stopped
+        result = distribute_current_weighted(
+            available_a=11.0, chargers=[(6.0, 32.0, 50), (6.0, 32.0, 50)]
+        )
+        assert result[0] == 11.0
+        assert result[1] is None
+
+    def test_priority_tiebreak_equal_weights_6a(self):
+        """Highest-priority charger charges at minimum when headroom exactly meets one charger's minimum."""
+        # 6 A, min 6 A, equal weights → proportional = 3 A each < 6 A min
+        # Tie-break: A gets 6 A; 0 A < 6 A min for B → B stopped
+        result = distribute_current_weighted(
+            available_a=6.0, chargers=[(6.0, 32.0, 50), (6.0, 32.0, 50)]
+        )
+        assert result[0] == 6.0
+        assert result[1] is None
+
+    def test_priority_tiebreak_weighted_9a(self):
+        """Higher-weight charger receives all headroom when proportional allocation would stop all chargers."""
+        # 9 A, 60/40 weights, min 6 A → A gets 5.4 A, B gets 3.6 A → both below min
+        # Tie-break: A (higher weight) first, 9 A ≥ 6 A → A keeps; 3 A < 6 A min for B
+        result = distribute_current_weighted(
+            available_a=9.0, chargers=[(6.0, 32.0, 60), (6.0, 32.0, 40)]
+        )
+        assert result[0] == 9.0
+        assert result[1] is None
+
+    def test_priority_tiebreak_truly_insufficient_stops_all(self):
+        """All chargers stop when headroom falls below every charger's minimum operating current."""
+        # 5 A available, min 6 A → no charger can charge
+        result = distribute_current_weighted(
+            available_a=5.0, chargers=[(6.0, 32.0, 50), (6.0, 32.0, 50)]
         )
         assert result == [None, None]
 

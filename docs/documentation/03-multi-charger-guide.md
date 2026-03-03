@@ -157,17 +157,19 @@ Charger A's higher priority keeps it running; Charger B would receive an unsafe 
 
 ---
 
-#### Example 5 — All chargers stop
+#### Example 5 — Priority tie-break, 11 A available (equal priority)
 
 With only 11 A available and both chargers at equal priority 50/50:
 
 | | Charger A | Charger B |
 |---|---|---|
 | Round 1 shares | 5.5 → 5 A | 5.5 → 5 A |
-| Min check | 5 A < 6 A → **stopped** | 5 A < 6 A → **stopped** |
-| **Final allocation** | **stopped** | **stopped** |
+| Min check | 5 A < 6 A → below min | 5 A < 6 A → below min |
+| **Tie-break** | remaining 11 A ≥ 6 A min → **keep A** | after A: 5 A < 6 A min → **stopped** |
+| **Round 2 (A only)** | **11 A** | — |
+| **Final allocation** | **11 A** | **stopped** |
 
-Equal priority means neither charger wins over the other. With insufficient headroom for a fair split, both stop rather than letting one charger monopolize.
+When the proportional split would leave every charger below minimum, the algorithm falls back to a priority tie-break: chargers are served in descending weight order (ties broken by charger index — lower index wins).  The first charger whose minimum can be met is kept running and absorbs all remaining headroom; the rest stop.
 
 ---
 
@@ -177,8 +179,8 @@ Equal priority means neither charger wins over the other. With insufficient head
 |---|---|---|---|
 | ≥ 12 | ≥ 6 A | ≥ 6 A | Both active |
 | 12 | 6 A | 6 A | Both at minimum |
-| 11 | stopped | stopped | 5.5 A each < 6 A min |
-| 6 | stopped | stopped | 3 A each < 6 A min |
+| 11 | 11 A | stopped | Tie-break: A (index 0) takes all; 5 A left < B's 6 A min |
+| 6 | 6 A | stopped | Tie-break: A at minimum; 0 A left for B |
 | 0 | stopped | stopped | No headroom |
 
 #### Summary table — impact on 60/40 weighted chargers (min 6 A, max 32 A)
@@ -189,7 +191,7 @@ Equal priority means neither charger wins over the other. With insufficient head
 | 15 | 9 A | 6 A | B at minimum |
 | 14 | 14 A | stopped | B's share (5.6→5 A) < min; A absorbs all |
 | 10 | 10 A | stopped | A at minimum, B stopped |
-| 9 | stopped | stopped | A's share (5.4→5 A) < min; all stop |
+| 9 | 9 A | stopped | Tie-break: A (higher weight) takes all; 3 A left < B's 6 A min |
 
 ---
 

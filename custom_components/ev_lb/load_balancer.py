@@ -253,6 +253,119 @@ def distribute_current(
     return allocations
 
 
+def _compute_weighted_shares(
+    active: list[int],
+    chargers: Sequence[tuple[float, float, float | int]],
+    remaining: float,
+) -> dict[int, float]:
+    """Return each active charger's proportional share of *remaining* current.
+
+    Falls back to equal distribution when all weights are zero or negative.
+    """
+    total_weight = sum(chargers[i][2] for i in active)
+    if total_weight <= 0:
+        return {i: remaining / len(active) for i in active}
+    return {i: remaining * (chargers[i][2] / total_weight) for i in active}
+
+
+def _classify_weighted_chargers(
+    active: list[int],
+    chargers: Sequence[tuple[float, float, float | int]],
+    shares: dict[int, float],
+    step_a: float,
+) -> tuple[list[int], list[int]]:
+    """Classify active chargers as capped or below-minimum given their weighted share.
+
+    Returns ``(capped, below_min)`` index lists.
+    """
+    capped: list[int] = []
+    below_min: list[int] = []
+    for i in active:
+        min_a, max_a, _ = chargers[i]
+        max_floored = (max_a // step_a) * step_a
+        target = (min(shares[i], max_a) // step_a) * step_a
+        if target >= max_floored:
+            capped.append(i)
+        elif target < min_a:
+            below_min.append(i)
+    return capped, below_min
+
+
+def _assign_weighted_final_shares(
+    active: list[int],
+    chargers: Sequence[tuple[float, float, float | int]],
+    shares: dict[int, float],
+    step_a: float,
+    allocations: list[float | None],
+) -> None:
+    """Assign stable weighted shares to remaining active chargers in-place."""
+    for i in active:
+        min_a, _, _ = chargers[i]
+        target = (shares[i] // step_a) * step_a
+        allocations[i] = target if target >= min_a else None
+
+
+def _settle_weighted_capped(
+    capped: list[int],
+    chargers: Sequence[tuple[float, float, float | int]],
+    step_a: float,
+    active: list[int],
+    allocations: list[float | None],
+    remaining: float,
+) -> float:
+    """Lock capped chargers at their maximum and remove them from the active pool.
+
+    Returns the updated remaining current after subtracting capped allocations.
+    """
+    for i in capped:
+        max_floored = (chargers[i][1] // step_a) * step_a
+        min_a = chargers[i][0]
+        if max_floored >= min_a:
+            allocations[i] = max_floored
+            remaining -= max_floored
+        else:
+            allocations[i] = None
+        active.remove(i)
+    return remaining
+
+
+def _apply_weighted_priority_tiebreak(
+    below_min: list[int],
+    chargers: Sequence[tuple[float, float, float | int]],
+    active: list[int],
+    allocations: list[float | None],
+    remaining: float,
+) -> None:
+    """Handle below-minimum chargers, applying a priority tie-break when needed.
+
+    When *all* remaining active chargers are below their minimum, stopping every
+    one of them wastes available headroom.  Instead, the algorithm greedily
+    assigns the minimum current to chargers in descending weight order (ties
+    broken by charger index, i.e. lower index wins).  Each charger whose minimum
+    can still be met from ``remaining`` is kept active; the others are stopped.
+    Kept chargers will receive their final allocation in the next loop iteration.
+
+    When only some chargers are below minimum (others are stable), the original
+    behaviour is preserved: every below-minimum charger is stopped immediately.
+    """
+    if len(below_min) == len(active):
+        # Priority tie-break: serve as many chargers as possible in weight order.
+        sorted_below = sorted(below_min, key=lambda i: (-chargers[i][2], i))
+        temp_remaining = remaining
+        for i in sorted_below:
+            min_a = chargers[i][0]
+            if temp_remaining >= min_a:
+                temp_remaining -= min_a
+                # Keep i in active; final share assigned in next iteration
+            else:
+                allocations[i] = None
+                active.remove(i)
+    else:
+        for i in below_min:
+            allocations[i] = None
+            active.remove(i)
+
+
 def distribute_current_weighted(
     available_a: float,
     chargers: Sequence[tuple[float, float, float | int]],
@@ -265,13 +378,11 @@ def distribute_current_weighted(
     1.  Compute each active charger's proportional share based on its weight.
     2.  Chargers whose weighted share reaches or exceeds their maximum are capped
         at that maximum; surplus is returned to the remaining pool.
-    3.  Chargers whose weighted share falls below their minimum are stopped
-        (allocated ``None``); their share is returned to the pool and weights
-        are re-normalised over the remaining active chargers.
+    3.  Chargers that cannot meet their minimum from their proportional share
+        enter a priority queue: the highest-weighted charger (ties broken by
+        index) claims available headroom first, preventing waste of capacity.
+        When only some chargers are below minimum, they are stopped normally.
     4.  Repeat until no charger changes state, then assign final shares.
-
-    When all weights are equal this produces the same result as
-    :func:`distribute_current`.
 
     Args:
         available_a:  Total current available for EV charging in Amps.
@@ -293,48 +404,15 @@ def distribute_current_weighted(
     remaining: float = available_a
 
     while active:
-        total_weight = sum(chargers[i][2] for i in active)
-        if total_weight <= 0:
-            # All weights are zero or negative — fall back to equal distribution
-            total_weight = float(len(active))
-            shares = {i: remaining / len(active) for i in active}
-        else:
-            shares = {
-                i: remaining * (chargers[i][2] / total_weight) for i in active
-            }
-
-        capped: list[int] = []
-        below_min: list[int] = []
-        for i in active:
-            min_a, max_a, _ = chargers[i]
-            max_floored = (max_a // step_a) * step_a
-            target = (min(shares[i], max_a) // step_a) * step_a
-            if target >= max_floored:
-                capped.append(i)
-            elif target < min_a:
-                below_min.append(i)
+        shares = _compute_weighted_shares(active, chargers, remaining)
+        capped, below_min = _classify_weighted_chargers(active, chargers, shares, step_a)
 
         if not capped and not below_min:
-            # Stable — assign final weighted shares
-            for i in active:
-                min_a, _, _ = chargers[i]
-                target = (shares[i] // step_a) * step_a
-                allocations[i] = target if target >= min_a else None
+            _assign_weighted_final_shares(active, chargers, shares, step_a, allocations)
             break
 
-        for i in capped:
-            max_floored = (chargers[i][1] // step_a) * step_a
-            min_a = chargers[i][0]
-            if max_floored >= min_a:
-                allocations[i] = max_floored
-                remaining -= max_floored
-            else:
-                allocations[i] = None
-            active.remove(i)
-
-        for i in below_min:
-            allocations[i] = None
-            active.remove(i)
+        remaining = _settle_weighted_capped(capped, chargers, step_a, active, allocations, remaining)
+        _apply_weighted_priority_tiebreak(below_min, chargers, active, allocations, remaining)
 
     return allocations
 

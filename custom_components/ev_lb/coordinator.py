@@ -1087,6 +1087,56 @@ class EvLoadBalancerCoordinator:
         """Return True if any charger has at least one action script configured."""
         return any(c.has_actions() for c in self._chargers)
 
+    async def _execute_charger_transition(
+        self,
+        charger: _ChargerState,
+        charger_num: int,
+        charger_id: str,
+        prev_active: bool,
+        prev_current: float,
+    ) -> None:
+        """Execute the action(s) for a single charger based on its state transition.
+
+        Dispatches start_charging + set_current on resume, stop_charging on stop,
+        and set_current when only the current level changes.  No action is taken
+        when the charger state has not changed.
+        """
+        new_active = charger.active
+        new_current = charger.current_set_a
+        current_w = round(new_current * self._voltage, 1)
+
+        if new_active and not prev_active:
+            await self._call_action(
+                charger.action_start_charging,
+                "start_charging",
+                charger_id=charger_id,
+                charger_num=charger_num,
+            )
+            await self._call_action(
+                charger.action_set_current,
+                "set_current",
+                charger_id=charger_id,
+                charger_num=charger_num,
+                current_a=new_current,
+                current_w=current_w,
+            )
+        elif not new_active and prev_active:
+            await self._call_action(
+                charger.action_stop_charging,
+                "stop_charging",
+                charger_id=charger_id,
+                charger_num=charger_num,
+            )
+        elif new_active and new_current != prev_current:
+            await self._call_action(
+                charger.action_set_current,
+                "set_current",
+                charger_id=charger_id,
+                charger_num=charger_num,
+                current_a=new_current,
+                current_w=current_w,
+            )
+
     async def _execute_actions(
         self,
         prev_charger_actives: list[bool],
@@ -1117,45 +1167,9 @@ class EvLoadBalancerCoordinator:
         ):
             if not charger.has_actions():
                 continue
-
-            new_active_i = charger.active
-            new_current_i = charger.current_set_a
-            current_w_i = round(new_current_i * self._voltage, 1)
-
-            if new_active_i and not prev_active_i:
-                # Resume: start charging, then set the target current
-                await self._call_action(
-                    charger.action_start_charging,
-                    "start_charging",
-                    charger_id=charger_id,
-                    charger_num=charger_num,
-                )
-                await self._call_action(
-                    charger.action_set_current,
-                    "set_current",
-                    charger_id=charger_id,
-                    charger_num=charger_num,
-                    current_a=new_current_i,
-                    current_w=current_w_i,
-                )
-            elif not new_active_i and prev_active_i:
-                # Stop charging
-                await self._call_action(
-                    charger.action_stop_charging,
-                    "stop_charging",
-                    charger_id=charger_id,
-                    charger_num=charger_num,
-                )
-            elif new_active_i and new_current_i != prev_current_i:
-                # Current changed while active — adjust
-                await self._call_action(
-                    charger.action_set_current,
-                    "set_current",
-                    charger_id=charger_id,
-                    charger_num=charger_num,
-                    current_a=new_current_i,
-                    current_w=current_w_i,
-                )
+            await self._execute_charger_transition(
+                charger, charger_num, charger_id, prev_active_i, prev_current_i
+            )
 
         # Refresh diagnostic sensors after actions complete — the initial
         # dispatcher signal is sent by _update_and_notify() before actions
