@@ -72,7 +72,7 @@
     }
   },
   "error": {
-    "duplicate_charger_status": "This status sensor is already used by another charger. Please select a different sensor."
+    "duplicate_charger_status": "This status sensor is already used by another charger (in this or another load balancer instance). Please select a different sensor."
   },
   "entity": {
     "sensor": {

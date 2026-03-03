@@ -338,6 +338,30 @@ class EvLbOptionsFlow(OptionsFlow):
             }
         return {}
 
+    def _status_sensors_in_other_entries(self) -> set[str]:
+        """Return all charger status sensors claimed by other config entries.
+
+        Iterates every loaded entry for this domain, skipping the entry that
+        is currently being edited, and collects every ``charger_status_entity``
+        value from the new CONF_CHARGERS list and from the legacy flat key.
+        """
+        used: set[str] = set()
+        current_entry_id = self.config_entry.entry_id
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.entry_id == current_entry_id:
+                continue
+            combined = {**entry.data, **entry.options}
+            # New-format: list of per-charger dicts
+            for charger in combined.get(CONF_CHARGERS) or []:
+                sensor = charger.get(CONF_CHARGER_STATUS_ENTITY)
+                if sensor:
+                    used.add(sensor)
+            # Legacy flat key
+            sensor = combined.get(CONF_CHARGER_STATUS_ENTITY)
+            if sensor:
+                used.add(sensor)
+        return used
+
     def _save_charger_entry(
         self, user_input: dict[str, Any]
     ) -> dict[str, Any]:
@@ -364,14 +388,15 @@ class EvLbOptionsFlow(OptionsFlow):
             add_another = bool(user_input.pop(_CONF_ADD_ANOTHER, False))
             entry = self._save_charger_entry(user_input)
 
-            # Validate: charger status sensor must not be shared with another charger
+            # Validate: charger status sensor must not be shared with another
+            # charger — either within this flow or in any other config entry.
             status_entity = entry.get(CONF_CHARGER_STATUS_ENTITY)
             if status_entity:
                 already_used = {
                     c.get(CONF_CHARGER_STATUS_ENTITY)
                     for c in self._chargers_data
                     if c.get(CONF_CHARGER_STATUS_ENTITY)
-                }
+                } | self._status_sensors_in_other_entries()
                 if status_entity in already_used:
                     errors[CONF_CHARGER_STATUS_ENTITY] = "duplicate_charger_status"
 

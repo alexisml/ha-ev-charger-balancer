@@ -468,3 +468,62 @@ async def test_options_flow_rejects_duplicate_charger_status_sensor(
     assert len(chargers) == 2
     assert chargers[0][CONF_CHARGER_STATUS_ENTITY] == "sensor.ocpp_status"
     assert chargers[1][CONF_CHARGER_STATUS_ENTITY] == "sensor.ocpp_status_2"
+
+
+async def test_options_flow_rejects_charger_status_sensor_used_in_other_entry(
+    hass: HomeAssistant,
+    mock_config_entry_no_actions: MockConfigEntry,
+) -> None:
+    """Using a status sensor already claimed by another load balancer instance is rejected.
+
+    A charger 'is charging' sensor must be exclusive to a single charger across
+    all instances.  Sharing it would cause the balancer to misread the charging
+    state on two separate circuits simultaneously.
+    """
+    # Set up an existing instance that already owns sensor.ocpp_status
+    other_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "power_meter_entity": "sensor.garage_power_w",
+            "voltage": 230.0,
+            "max_service_current": 16.0,
+        },
+        options={
+            CONF_CHARGERS: [
+                {CONF_CHARGER_STATUS_ENTITY: "sensor.ocpp_status"},
+            ]
+        },
+        unique_id="sensor.garage_power_w",
+    )
+    other_entry.add_to_hass(hass)
+    mock_config_entry_no_actions.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry_no_actions.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "charger"
+
+    # Attempt to reuse the sensor owned by the other entry — should fail
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_CHARGER_STATUS_ENTITY: "sensor.ocpp_status",
+            CONF_CHARGER_PRIORITY: DEFAULT_CHARGER_PRIORITY,
+        },
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "charger"
+    assert result["errors"] == {CONF_CHARGER_STATUS_ENTITY: "duplicate_charger_status"}
+
+    # Using a different sensor succeeds
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_CHARGER_STATUS_ENTITY: "sensor.ocpp_status_house",
+            CONF_CHARGER_PRIORITY: DEFAULT_CHARGER_PRIORITY,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_CHARGERS][0][CONF_CHARGER_STATUS_ENTITY] == "sensor.ocpp_status_house"
