@@ -872,14 +872,25 @@ class EvLoadBalancerCoordinator:
         A defense-in-depth safety clamp ensures the output never exceeds
         the service or charger limits, even if upstream logic has a bug.
         """
-        # Safety clamp: output must never exceed charger max or service limit
-        clamped_a = clamp_to_safe_output(current_a, self.max_charger_current, self._max_service_current)
+        # Safety clamp: output must never exceed the aggregate charger maximum
+        # (n_chargers × per-charger max) or the service limit, even if upstream
+        # logic has a bug.  For a single charger this equals max_charger_current.
+        # Guard against an empty list (should not happen in practice, but avoids
+        # a division-by-zero style edge case if the coordinator is ever constructed
+        # without chargers before _load_chargers runs).
+        n_chargers = max(1, len(self._chargers))
+        clamped_a = clamp_to_safe_output(
+            current_a,
+            n_chargers * self.max_charger_current,
+            self._max_service_current,
+        )
         if clamped_a != current_a:
             _LOGGER.warning(
                 "Safety clamp: computed %.1f A exceeds safe maximum %.1f A "
-                "(charger_max=%.1f, service_max=%.1f) — clamping",
+                "(chargers=%d, charger_max=%.1f, service_max=%.1f) — clamping",
                 current_a,
                 clamped_a,
+                n_chargers,
                 self.max_charger_current,
                 self._max_service_current,
             )
