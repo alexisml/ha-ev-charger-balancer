@@ -440,24 +440,24 @@ class TestTwoChargersRampUpCooldown:
         # by directly setting its last_reduction_time to far in the past.
         # This is intentional: the test validates per-charger independent cooldown
         # tracking, which requires different timestamps on the two chargers.
-        coordinator._chargers[1].last_reduction_time = 900.0  # t=900, far before now
+        coordinator._chargers[1].last_reduction_time = 900.0  # t=900, 100 s before now
+        coordinator._chargers[1].current_set_a = 7.0
 
         # Charger A just reduced now (t=1000)
         coordinator._chargers[0].last_reduction_time = 1000.0
-
-        # At t=1032 (32 s later): charger B's cooldown (1032-900=132 s) has expired;
-        # charger A's cooldown (1032-1000=32 s) has also just expired.
-        # Change both to 7 A so the ramp-up test is visible.
         coordinator._chargers[0].current_set_a = 7.0
-        coordinator._chargers[1].current_set_a = 7.0
 
-        mock_time = 1031.0  # 31 s after A's reduction, 131 s after B's — both cooldowns expired
+        # At t=1029 (29 s since A's reduction, 129 s since B's):
+        #   B's cooldown (129 s > 30 s) has expired → B can ramp up
+        #   A's cooldown (29 s < 30 s) has NOT expired → A still held
+        mock_time = 1029.0
         hass.states.async_set(POWER_METER, "3003")
         await hass.async_block_till_done()
 
-        # Both cooldowns have elapsed — both chargers should increase
-        assert coordinator._chargers[0].current_set_a > 7.0
+        # B's cooldown has elapsed — it should increase above its held current
         assert coordinator._chargers[1].current_set_a > 7.0
+        # A's cooldown has NOT elapsed — it must remain at its held current
+        assert coordinator._chargers[0].current_set_a == 7.0
 
 
 # ---------------------------------------------------------------------------

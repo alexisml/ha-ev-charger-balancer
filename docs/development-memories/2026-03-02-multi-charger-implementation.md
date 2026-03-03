@@ -1,5 +1,6 @@
 Title: Multi-Charger Implementation Notes
 Date: 2026-03-02
+Status: in-review
 Author: GitHub Copilot
 Summary: Design decisions, rationale, and lessons learned from implementing multi-charger support (PR-1/2/3-ph2).
 

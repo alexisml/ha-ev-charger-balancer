@@ -102,7 +102,6 @@ class _ChargerState:
         "active",
         "ev_charging",
         "last_reduction_time",
-        "action_task",
     )
 
     def __init__(
@@ -124,7 +123,6 @@ class _ChargerState:
         self.active: bool = False
         self.ev_charging: bool = True
         self.last_reduction_time: float | None = None
-        self.action_task: asyncio.Task | None = None
 
     def has_actions(self) -> bool:
         """Return True if at least one action script is configured for this charger."""
@@ -353,9 +351,6 @@ class EvLoadBalancerCoordinator:
         self._cancel_overload_timers()
         if self._action_task and not self._action_task.done():
             self._action_task.cancel()
-        for charger in self._chargers:
-            if charger.action_task and not charger.action_task.done():
-                charger.action_task.cancel()
         _LOGGER.debug("Coordinator stopped")
 
     @callback
@@ -926,8 +921,9 @@ class EvLoadBalancerCoordinator:
                 charger.active = final_i > 0
                 charger.current_set_a = final_i
         else:
-            # Fallback / manual path: single current value split equally across all chargers.
-            per_charger_value = current_a / len(self._chargers) if self._chargers else 0.0
+            # Fallback / manual path: current_a is a per-charger value (already clamped
+            # by the caller); apply the same current to every charger.
+            per_charger_value = current_a
             for charger in self._chargers:
                 charger.active = per_charger_value > 0
                 charger.current_set_a = per_charger_value

@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import (
+    CHARGER_PRIORITY_STEP,
     DEFAULT_MAX_CHARGER_CURRENT,
     DEFAULT_MIN_EV_CURRENT,
     DEFAULT_OVERLOAD_LOOP_INTERVAL,
@@ -268,7 +269,7 @@ class EvLbChargerPriorityNumber(RestoreNumber):
     _attr_translation_key = "charger_priority"
     _attr_native_min_value = float(MIN_CHARGER_PRIORITY)
     _attr_native_max_value = float(MAX_CHARGER_PRIORITY)
-    _attr_native_step = 5.0
+    _attr_native_step = float(CHARGER_PRIORITY_STEP)
     _attr_mode = NumberMode.SLIDER
 
     def __init__(
