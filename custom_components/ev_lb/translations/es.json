@@ -50,53 +50,26 @@
           "unavailable_fallback_current": "Corriente de carga (A) a usar cuando el medidor no está disponible y el modo es 'Establecer una corriente específica'. Este valor se limitará a la corriente máxima del cargador."
         }
       },
-      "charger_1": {
-        "title": "Configuración del Cargador 1",
-        "description": "Configura los scripts de acción, el sensor de estado y la prioridad del primer cargador.",
+      "charger": {
+        "title": "Configurar Cargador",
+        "description": "Configura los scripts de acción, el sensor de estado y la prioridad del cargador {charger_num}. La prioridad controla cómo se distribuye la corriente disponible cuando varios cargadores compiten por el margen.",
         "data": {
           "action_set_current": "Acción para establecer corriente (script)",
           "action_stop_charging": "Acción para detener carga (script)",
           "action_start_charging": "Acción para iniciar carga (script)",
           "charger_status_entity": "Sensor de estado del cargador (opcional)",
           "priority": "Prioridad (mayor = más corriente)",
-          "add_another_charger": "¿Agregar un segundo cargador?"
+          "add_another_charger": "¿Agregar otro cargador?"
         },
         "data_description": {
           "priority": "Peso de prioridad para este cargador (0–100, paso 5). Los valores más altos reciben proporcionalmente más corriente disponible.",
-          "add_another_charger": "Activa para configurar un segundo cargador con su propia prioridad."
-        }
-      },
-      "charger_2": {
-        "title": "Configuración del Cargador 2",
-        "description": "Configura los scripts de acción, el sensor de estado y la prioridad del segundo cargador.",
-        "data": {
-          "action_set_current": "Acción para establecer corriente (script)",
-          "action_stop_charging": "Acción para detener carga (script)",
-          "action_start_charging": "Acción para iniciar carga (script)",
-          "charger_status_entity": "Sensor de estado del cargador (opcional)",
-          "priority": "Prioridad (mayor = más corriente)",
-          "add_another_charger": "¿Agregar un tercer cargador?"
-        },
-        "data_description": {
-          "priority": "Peso de prioridad para este cargador (0–100, paso 5). Los valores más altos reciben proporcionalmente más corriente disponible.",
-          "add_another_charger": "Activa para configurar un tercer cargador con su propia prioridad."
-        }
-      },
-      "charger_3": {
-        "title": "Configuración del Cargador 3",
-        "description": "Configura los scripts de acción, el sensor de estado y la prioridad del tercer cargador.",
-        "data": {
-          "action_set_current": "Acción para establecer corriente (script)",
-          "action_stop_charging": "Acción para detener carga (script)",
-          "action_start_charging": "Acción para iniciar carga (script)",
-          "charger_status_entity": "Sensor de estado del cargador (opcional)",
-          "priority": "Prioridad (mayor = más corriente)"
-        },
-        "data_description": {
-          "priority": "Peso de prioridad para este cargador (0–100, paso 5). Los valores más altos reciben proporcionalmente más corriente disponible."
+          "add_another_charger": "Activa para configurar otro cargador con su propia prioridad."
         }
       }
     }
+  },
+  "error": {
+    "duplicate_charger_status": "Este sensor de estado ya está siendo utilizado por otro cargador. Por favor, selecciona un sensor diferente."
   },
   "entity": {
     "sensor": {

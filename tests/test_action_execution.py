@@ -365,7 +365,7 @@ class TestOptionsFlow:
     ) -> None:
         """Action scripts updated through the options flow take effect immediately.
 
-        Scripts entered on the charger_1 step (per-charger) are stored under
+        Scripts entered on the charger step (per-charger) are stored under
         CONF_CHARGERS[0] in options; the coordinator picks them up on reload.
         """
         await setup_integration(hass, mock_config_entry_no_actions)
@@ -377,12 +377,12 @@ class TestOptionsFlow:
         assert result["type"] == "form"
         assert result["step_id"] == "init"
 
-        # Submit global settings — always advances to charger_1
+        # Submit global settings — always advances to charger
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             user_input={},
         )
-        assert result["step_id"] == "charger_1"
+        assert result["step_id"] == "charger"
 
         # Submit per-charger action scripts
         result = await hass.config_entries.options.async_configure(

@@ -7,7 +7,8 @@ Tests cover:
 - Per-meter duplicate protection (abort if the same meter is already configured)
 - Multiple instances allowed when different power meters are used
 - Power meter EntitySelector is restricted to power device-class sensors
-- Per-charger action scripts and status sensor configured in charger_1 step
+- Per-charger action scripts and status sensor configured in the charger step
+- Duplicate charger status sensor rejected with a validation error
 """
 
 import voluptuous as vol
@@ -224,10 +225,10 @@ async def test_options_flow_opens_without_error(
 async def test_options_flow_saves_action_scripts(
     hass: HomeAssistant, mock_config_entry_no_actions: MockConfigEntry
 ) -> None:
-    """Action scripts configured on charger_1 step are saved in the CONF_CHARGERS list.
+    """Action scripts configured on the charger step are saved in the CONF_CHARGERS list.
 
     The options flow always proceeds from init (global settings) to per-charger
-    steps.  Scripts entered on the charger_1 step are stored under CONF_CHARGERS[0]
+    steps.  Scripts entered on the charger step are stored under CONF_CHARGERS[0]
     so the coordinator can call them when controlling that charger.
     """
     mock_config_entry_no_actions.add_to_hass(hass)
@@ -236,13 +237,13 @@ async def test_options_flow_saves_action_scripts(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "init"
 
-    # Submit global settings — always advances to charger_1
+    # Submit global settings — always advances to charger
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {},
     )
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "charger_1"
+    assert result["step_id"] == "charger"
 
     # Configure per-charger action scripts
     result = await hass.config_entries.options.async_configure(
@@ -265,19 +266,19 @@ async def test_options_flow_saves_action_scripts(
 async def test_options_flow_saves_charger_status_entity(
     hass: HomeAssistant, mock_config_entry_no_actions: MockConfigEntry
 ) -> None:
-    """Charger status sensor configured on charger_1 step is saved in CONF_CHARGERS[0].
+    """Charger status sensor configured on the charger step is saved in CONF_CHARGERS[0].
 
     The charger status entity is per-charger and is configured on the dedicated
-    charger_1 step, not the global init step.
+    charger step, not the global init step.
     """
     mock_config_entry_no_actions.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(mock_config_entry_no_actions.entry_id)
     assert result["type"] is FlowResultType.FORM
 
-    # Submit global settings — always advances to charger_1
+    # Submit global settings — always advances to charger
     result = await hass.config_entries.options.async_configure(result["flow_id"], {})
-    assert result["step_id"] == "charger_1"
+    assert result["step_id"] == "charger"
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -322,7 +323,7 @@ async def test_options_flow_saves_voltage_and_service_current(
 ) -> None:
     """Global electrical parameters updated in the init step are persisted.
 
-    The options flow always proceeds init → charger_1.  Voltage and max service
+    The options flow always proceeds init → charger.  Voltage and max service
     current entered on the init step must survive the full flow and appear in
     the saved options.
     """
@@ -339,9 +340,7 @@ async def test_options_flow_saves_voltage_and_service_current(
             CONF_MAX_SERVICE_CURRENT: 50.0,
         },
     )
-    assert result["step_id"] == "charger_1"
-
-    # Complete the charger step to save
+    assert result["step_id"] == "charger"
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {CONF_CHARGER_PRIORITY: DEFAULT_CHARGER_PRIORITY},
@@ -357,7 +356,7 @@ async def test_options_flow_saves_unavailable_behavior(
 ) -> None:
     """Unavailable-meter behavior changed in the init step is persisted.
 
-    Changing this setting must survive the full init → charger_1 flow so
+    Changing this setting must survive the full init → charger flow so
     users can switch between stop, ignore, and set-current modes without
     recreating the integration.
     """
@@ -375,7 +374,7 @@ async def test_options_flow_saves_unavailable_behavior(
             CONF_UNAVAILABLE_FALLBACK_CURRENT: 8.0,
         },
     )
-    assert result["step_id"] == "charger_1"
+    assert result["step_id"] == "charger"
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -412,3 +411,60 @@ async def test_options_flow_prefills_current_values(
         k for k in schema.schema if getattr(k, "schema", None) == CONF_MAX_SERVICE_CURRENT
     )
     assert service_current_key.default() == mock_config_entry_no_actions.data[CONF_MAX_SERVICE_CURRENT]
+
+
+async def test_options_flow_rejects_duplicate_charger_status_sensor(
+    hass: HomeAssistant, mock_config_entry_no_actions: MockConfigEntry
+) -> None:
+    """Selecting the same status sensor for two chargers triggers a validation error.
+
+    Sharing a single 'is charging' sensor across chargers would cause the
+    balancer to misread charging state.  The flow must reject the duplicate
+    and keep the user on the same charger step so they can correct the choice.
+    """
+    mock_config_entry_no_actions.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(mock_config_entry_no_actions.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "charger"
+
+    # Configure charger 1 with a status sensor and request a second charger
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_CHARGER_STATUS_ENTITY: "sensor.ocpp_status",
+            CONF_CHARGER_PRIORITY: DEFAULT_CHARGER_PRIORITY,
+            "add_another_charger": True,
+        },
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "charger"
+
+    # Try to use the same sensor for charger 2 — should fail
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_CHARGER_STATUS_ENTITY: "sensor.ocpp_status",
+            CONF_CHARGER_PRIORITY: DEFAULT_CHARGER_PRIORITY,
+        },
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "charger"
+    assert result["errors"] == {CONF_CHARGER_STATUS_ENTITY: "duplicate_charger_status"}
+
+    # Correcting to a different sensor completes the flow
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_CHARGER_STATUS_ENTITY: "sensor.ocpp_status_2",
+            CONF_CHARGER_PRIORITY: DEFAULT_CHARGER_PRIORITY,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    chargers = result["data"][CONF_CHARGERS]
+    assert len(chargers) == 2
+    assert chargers[0][CONF_CHARGER_STATUS_ENTITY] == "sensor.ocpp_status"
+    assert chargers[1][CONF_CHARGER_STATUS_ENTITY] == "sensor.ocpp_status_2"

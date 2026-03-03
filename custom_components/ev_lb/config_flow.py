@@ -211,14 +211,12 @@ _CONF_ADD_ANOTHER = "add_another_charger"
 
 def _charger_schema(
     defaults: dict[str, Any],
-    charger_num: int,
     add_another_option: bool,
 ) -> vol.Schema:
     """Return the voluptuous schema for one charger configuration step.
 
     Args:
         defaults:           Pre-fill values (empty dict for a blank form).
-        charger_num:        1-based charger index shown in descriptions.
         add_another_option: When True, include the "add another charger?" field.
     """
     fields: dict[Any, Any] = {
@@ -252,18 +250,21 @@ class EvLbOptionsFlow(OptionsFlow):
     """Handle options flow for EV Charger Load Balancing.
 
     The first step (*init*) manages global settings (voltage, service limit,
-    unavailable-meter behaviour).  It always proceeds to *charger_1* so that
+    unavailable-meter behaviour).  It always proceeds to *charger* so that
     per-charger action scripts, status sensor, and priority weight are
     configured on dedicated charger steps rather than mixed with global fields.
 
-    Up to MAX_CHARGERS chargers can be configured via the "add another?"
-    toggle on each charger step.
+    The *charger* step re-enters itself for each additional charger via the
+    "add another charger?" toggle, up to MAX_CHARGERS total.  This avoids
+    hardcoded per-charger step handlers and allows the cap to be raised by
+    only changing MAX_CHARGERS in const.py.
     """
 
     def __init__(self) -> None:
         """Initialise the options flow with empty multi-step accumulators."""
         self._global_settings: dict[str, Any] = {}
         self._chargers_data: list[dict[str, Any]] = []
+        self._current_charger_idx: int = 0
 
     async def async_step_init(
         self,
@@ -271,13 +272,14 @@ class EvLbOptionsFlow(OptionsFlow):
     ) -> FlowResult:
         """Handle the first step — global settings only.
 
-        Always proceeds to charger_1 so that action scripts and status sensors
+        Always proceeds to charger so that action scripts and status sensors
         are configured per charger on dedicated steps.
         """
         if user_input is not None:
             self._global_settings = user_input
             self._chargers_data = []
-            return await self.async_step_charger_1()
+            self._current_charger_idx = 0
+            return await self.async_step_charger()
 
         # Pre-fill with current values (options take priority, then data)
         current = {**self.config_entry.data, **self.config_entry.options}
@@ -312,7 +314,7 @@ class EvLbOptionsFlow(OptionsFlow):
         )
 
     # ------------------------------------------------------------------
-    # Per-charger configuration steps (charger_1 → charger_2 → charger_3)
+    # Per-charger configuration step (loops back to itself for each charger)
     # ------------------------------------------------------------------
 
     def _existing_charger_defaults(self, charger_idx: int) -> dict[str, Any]:
@@ -345,67 +347,55 @@ class EvLbOptionsFlow(OptionsFlow):
             if k != _CONF_ADD_ANOTHER and v is not None
         }
 
-    async def async_step_charger_1(
+    async def async_step_charger(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> FlowResult:
-        """Configure the first charger — actions, status sensor, and priority."""
+        """Configure one charger — actions, status sensor, and priority.
+
+        Loops back to itself when the user enables 'add another charger' and
+        MAX_CHARGERS has not yet been reached.  Validates that the charger
+        status sensor is not already assigned to a previously configured charger.
+        """
+        errors: dict[str, str] = {}
+        charger_num = self._current_charger_idx + 1
+
         if user_input is not None:
             add_another = bool(user_input.pop(_CONF_ADD_ANOTHER, False))
-            self._chargers_data = [self._save_charger_entry(user_input)]
-            if add_another and len(self._chargers_data) < MAX_CHARGERS:
-                return await self.async_step_charger_2()
-            return self._finish_charger_flow()
+            entry = self._save_charger_entry(user_input)
 
-        defaults = self._existing_charger_defaults(0)
+            # Validate: charger status sensor must not be shared with another charger
+            status_entity = entry.get(CONF_CHARGER_STATUS_ENTITY)
+            if status_entity:
+                already_used = {
+                    c.get(CONF_CHARGER_STATUS_ENTITY)
+                    for c in self._chargers_data
+                    if c.get(CONF_CHARGER_STATUS_ENTITY)
+                }
+                if status_entity in already_used:
+                    errors[CONF_CHARGER_STATUS_ENTITY] = "duplicate_charger_status"
+
+            if not errors:
+                self._chargers_data.append(entry)
+                if add_another and len(self._chargers_data) < MAX_CHARGERS:
+                    self._current_charger_idx += 1
+                    return await self.async_step_charger()
+                return self._finish_charger_flow()
+
+            # Re-show the form with the user's previous input so they don't
+            # have to re-enter scripts after fixing the duplicate sensor.
+            defaults = dict(entry)
+        else:
+            defaults = self._existing_charger_defaults(self._current_charger_idx)
+
         return self.async_show_form(
-            step_id="charger_1",
+            step_id="charger",
             data_schema=_charger_schema(
                 defaults,
-                charger_num=1,
-                add_another_option=MAX_CHARGERS > 1,
+                add_another_option=charger_num < MAX_CHARGERS,
             ),
-        )
-
-    async def async_step_charger_2(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
-        """Configure the second charger — actions, status sensor, and priority."""
-        if user_input is not None:
-            add_another = bool(user_input.pop(_CONF_ADD_ANOTHER, False))
-            self._chargers_data.append(self._save_charger_entry(user_input))
-            if add_another and len(self._chargers_data) < MAX_CHARGERS:
-                return await self.async_step_charger_3()
-            return self._finish_charger_flow()
-
-        defaults = self._existing_charger_defaults(1)
-        return self.async_show_form(
-            step_id="charger_2",
-            data_schema=_charger_schema(
-                defaults,
-                charger_num=2,
-                add_another_option=MAX_CHARGERS > 2,
-            ),
-        )
-
-    async def async_step_charger_3(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> FlowResult:
-        """Configure the third charger — actions, status sensor, and priority."""
-        if user_input is not None:
-            self._chargers_data.append(self._save_charger_entry(user_input))
-            return self._finish_charger_flow()
-
-        defaults = self._existing_charger_defaults(2)
-        return self.async_show_form(
-            step_id="charger_3",
-            data_schema=_charger_schema(
-                defaults,
-                charger_num=3,
-                add_another_option=False,
-            ),
+            errors=errors,
+            description_placeholders={"charger_num": str(charger_num)},
         )
 
     def _finish_charger_flow(self) -> FlowResult:
