@@ -992,9 +992,16 @@ class EvLoadBalancerCoordinator:
                 scale = self._max_service_current / aggregate_f
                 clamped_values = [v * scale for v in clamped_values]
                 aggregate_f = sum(clamped_values)
-            # Floor to whole-amp steps so scripts never receive fractional currents.
-            # Flooring only reduces values, so the aggregate remains ≤ service limit.
-            int_values: list[int] = [int(v) for v in clamped_values]
+            # Floor to whole-amp steps and re-enforce the minimum safe current in
+            # one pass. Any floored value between 1 A and min_ev_current is unsafe
+            # to command; those chargers are stopped (0 A). Flooring only reduces
+            # values, so the aggregate remains ≤ service limit.
+            min_a = self.min_ev_current
+            int_values: list[int] = [
+                floored if floored == 0 or floored >= min_a else 0
+                for v in clamped_values
+                for floored in (int(v),)
+            ]
             aggregate_int = sum(int_values)
             # Apply the final per-charger currents.
             for charger, value in zip(self._chargers, int_values):
@@ -1017,6 +1024,13 @@ class EvLoadBalancerCoordinator:
                 # behaviour expected by charger scripts).
                 per_charger_value = self._max_service_current // n_chargers
                 aggregate = per_charger_value * n_chargers
+            # Ensure any per-charger value is either 0 A (stop) or at/above the
+            # minimum EV current. This prevents commanding unsafe low currents when
+            # the service limit is tight relative to the number of chargers
+            # (e.g. 10 A service / 2 chargers = 5 A < 6 A min → stop both).
+            if 0 < per_charger_value < self.min_ev_current:
+                per_charger_value = 0.0
+                aggregate = 0.0
             for charger in self._chargers:
                 charger.active = per_charger_value > 0
                 charger.current_set_a = per_charger_value
