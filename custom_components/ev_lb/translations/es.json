@@ -40,12 +40,14 @@
         "data": {
           "voltage": "Voltaje de suministro",
           "max_service_current": "Corriente máxima del servicio (capacidad del interruptor)",
-          "unavailable_behavior": "Cuando el medidor no está disponible"
+          "unavailable_behavior": "Cuando el medidor no está disponible",
+          "unavailable_fallback_current": "Corriente de respaldo heredada"
         },
         "data_description": {
           "voltage": "Voltaje nominal de suministro en Volts (usado para convertir W ↔ A).",
           "max_service_current": "Capacidad del interruptor principal en Amperes. La carga nunca excederá este límite. Puedes configurar un valor menor que la capacidad real del interruptor para reservar un margen de seguridad — por ejemplo, ingresa 28 A en un servicio de 32 A para dejar 4 A libres para otros consumos.",
-          "unavailable_behavior": "Qué hacer cuando el medidor de consumo no está disponible: detener todos los cargadores (más seguro) o usar la corriente de respaldo individual de cada cargador."
+          "unavailable_behavior": "Qué hacer cuando el medidor de consumo no está disponible: detener todos los cargadores (más seguro) o usar la corriente de respaldo individual de cada cargador.",
+          "unavailable_fallback_current": "Heredado: corriente de carga (A) usada cuando el comportamiento es 'Establecer una corriente específica' (opción anterior que ya no aparece en el menú). Esta opción ha sido reemplazada por la corriente de respaldo individual configurada en cada cargador. Se mantiene aquí para que las entradas existentes puedan seguir ajustándose."
         }
       },
       "charger": {

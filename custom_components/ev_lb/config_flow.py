@@ -314,6 +314,13 @@ class EvLbOptionsFlow(OptionsFlow):
                     CONF_UNAVAILABLE_BEHAVIOR,
                     default=current.get(CONF_UNAVAILABLE_BEHAVIOR, DEFAULT_UNAVAILABLE_BEHAVIOR),
                 ): _UNAVAILABLE_BEHAVIOR_SELECTOR,
+                vol.Optional(
+                    CONF_UNAVAILABLE_FALLBACK_CURRENT,
+                    default=current.get(
+                        CONF_UNAVAILABLE_FALLBACK_CURRENT,
+                        DEFAULT_UNAVAILABLE_FALLBACK_CURRENT,
+                    ),
+                ): _FALLBACK_CURRENT_SELECTOR,
             }
         )
 

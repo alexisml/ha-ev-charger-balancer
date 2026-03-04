@@ -40,12 +40,14 @@
         "data": {
           "voltage": "Supply voltage",
           "max_service_current": "Max service current (breaker rating)",
-          "unavailable_behavior": "When power meter is unavailable"
+          "unavailable_behavior": "When power meter is unavailable",
+          "unavailable_fallback_current": "Legacy fallback current"
         },
         "data_description": {
           "voltage": "Nominal supply voltage in Volts (used to convert W ↔ A).",
           "max_service_current": "Service current limit in Amps. Charging will never exceed this limit. You can set this lower than your actual breaker rating to reserve a safety margin — for example, enter 28 A on a 32 A service to keep 4 A free for other loads. It can also represent a subcircuit or any custom power budget.",
-          "unavailable_behavior": "What to do when the power meter becomes unavailable: stop all chargers (safest) or use each charger's individual fallback current."
+          "unavailable_behavior": "What to do when the power meter becomes unavailable: stop all chargers (safest) or use each charger's individual fallback current.",
+          "unavailable_fallback_current": "Legacy: charging current (A) used when the unavailable-behavior mode is 'Set a specific current' (an older setting no longer shown in the dropdown). This has been superseded by the per-charger fallback current configured on each charger step. Preserved here so existing entries can still be adjusted."
         }
       },
       "charger": {

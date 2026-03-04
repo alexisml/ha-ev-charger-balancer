@@ -951,11 +951,34 @@ class EvLoadBalancerCoordinator:
         # Update per-charger state from per_charger_finals when available,
         # otherwise distribute current_a to each charger (fallback / manual).
         if per_charger_finals is not None:
-            for charger, final_i in zip(self._chargers, per_charger_finals):
-                # Defense in depth: clamp each per-charger current to the safe range.
-                clamped_i = min(max(final_i, 0.0), self.max_charger_current)
-                charger.active = clamped_i > 0
-                charger.current_set_a = clamped_i
+            # Defense in depth: clamp each per-charger value to [0, max_charger_current].
+            # This applies to both the normal load-balancing path (where the algorithm
+            # already respects this limit) and the per-charger fallback path (where values
+            # come directly from user-configured constants that could exceed the limit).
+            clamped_values: list[float] = [
+                min(max(final_i, 0.0), self.max_charger_current)
+                for final_i in per_charger_finals
+            ]
+            # Enforce the service limit on the aggregate by scaling all values down
+            # proportionally. The load-balancing algorithm already respects the service
+            # limit, so this guard only fires in the per-charger fallback path where each
+            # charger's value comes from config and the aggregate may exceed the breaker
+            # rating (e.g. 2 chargers × 20 A = 40 A on a 32 A service).
+            aggregate_f = sum(clamped_values)
+            if self._max_service_current > 0 and aggregate_f > self._max_service_current:
+                scale = self._max_service_current / aggregate_f
+                clamped_values = [v * scale for v in clamped_values]
+                aggregate_f = sum(clamped_values)
+            # Floor to whole-amp steps so scripts never receive fractional currents.
+            # Flooring only reduces values, so the aggregate remains ≤ service limit.
+            int_values: list[int] = [int(v) for v in clamped_values]
+            aggregate_int = sum(int_values)
+            # Apply the final per-charger currents.
+            for charger, value in zip(self._chargers, int_values):
+                charger.active = value > 0
+                charger.current_set_a = float(value)
+            # Ensure current_a reflects the actual aggregate being commanded.
+            current_a = float(aggregate_int)
         else:
             # Fallback / manual path: current_a is a per-charger value (already clamped
             # by the caller); apply the same current to every charger and recompute the
