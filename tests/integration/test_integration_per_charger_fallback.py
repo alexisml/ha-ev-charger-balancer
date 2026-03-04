@@ -1,8 +1,8 @@
-"""Integration tests for per-charger fallback current behavior.
+"""Integration tests for per-charger fallback behavior during power meter outages.
 
-Tests verify that when the power meter becomes unavailable and the
-fallback mode is 'per_charger', each charger receives its own
-configured fallback current rather than a global value.
+Verifies that when the meter becomes unavailable with the 'per_charger' fallback
+mode, each charger operates at its individually configured safe rate rather than
+a single global value.
 """
 
 from unittest.mock import patch
@@ -37,12 +37,12 @@ from conftest import (
 
 
 class TestPerChargerFallbackSingleCharger:
-    """Single charger continues charging at its configured fallback current when the power meter becomes unavailable."""
+    """Single charger maintains safe operation during power meter outages using a pre-configured fallback current."""
 
     async def test_single_charger_fallback_applied_on_meter_loss(
         self, hass: HomeAssistant
     ) -> None:
-        """Charger receives its own configured fallback current when the meter is unavailable."""
+        """Charger maintains safe operation at 8 A when meter data is lost."""
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={
@@ -96,7 +96,7 @@ class TestPerChargerFallbackSingleCharger:
     async def test_fallback_current_capped_at_max_charger_current(
         self, hass: HomeAssistant
     ) -> None:
-        """Fallback current exceeding max charger current is capped to the charger limit."""
+        """Charger respects hardware limits even when configured fallback exceeds maximum rating."""
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={
@@ -127,7 +127,7 @@ class TestPerChargerFallbackSingleCharger:
     async def test_zero_fallback_current_stops_charging(
         self, hass: HomeAssistant
     ) -> None:
-        """A charger with fallback current set to 0 A stops charging when meter is unavailable."""
+        """Charging can be disabled during meter outages by configuring zero fallback current."""
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={
@@ -161,12 +161,12 @@ class TestPerChargerFallbackSingleCharger:
 
 
 class TestPerChargerFallbackMultiCharger:
-    """Multiple chargers each continue charging at their own configured fallback currents when the power meter becomes unavailable."""
+    """Multi-charger load balancing during power meter outages — each charger operates independently at its configured fallback rate."""
 
     async def test_two_chargers_get_independent_fallback_currents(
         self, hass: HomeAssistant
     ) -> None:
-        """Each charger receives its own fallback current when the meter is unavailable."""
+        """Multiple chargers maintain independent safe operation rates when meter data is lost."""
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={
@@ -207,7 +207,7 @@ class TestPerChargerFallbackMultiCharger:
     async def test_mixed_fallbacks_one_zero_one_nonzero(
         self, hass: HomeAssistant
     ) -> None:
-        """One charger stops while another continues charging at its fallback current."""
+        """Different fallback configurations allow selective charging during meter outages."""
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={
@@ -240,12 +240,12 @@ class TestPerChargerFallbackMultiCharger:
 
 
 class TestPerChargerFallbackDefaultValue:
-    """Chargers without an explicit fallback current setting use the system default (6 A) when the power meter becomes unavailable."""
+    """Chargers operate at a safe default rate when no explicit fallback current is configured."""
 
     async def test_default_fallback_current_applied_when_not_configured(
         self, hass: HomeAssistant
     ) -> None:
-        """Charger without explicit fallback current uses DEFAULT_CHARGER_FALLBACK_CURRENT (6 A)."""
+        """Unconfigured chargers fall back to 6 A safe charging rate during meter outages."""
         from custom_components.ev_lb.const import DEFAULT_CHARGER_FALLBACK_CURRENT
 
         entry = MockConfigEntry(
@@ -274,12 +274,12 @@ class TestPerChargerFallbackDefaultValue:
 
 
 class TestBackwardCompatibility:
-    """Existing configurations using legacy stop/set_current/ignore modes continue to function correctly after upgrade."""
+    """Legacy unavailable behavior modes remain functional for existing installations."""
 
     async def test_stop_behavior_still_works_in_coordinator(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Stop mode (existing config entries) continues to set charging to 0 A when meter is unavailable."""
+        """Legacy stop mode halts all charging when meter becomes unavailable."""
         await setup_integration(hass, mock_config_entry)
         coordinator = hass.data[DOMAIN][mock_config_entry.entry_id]["coordinator"]
         coordinator.ramp_up_time_s = 0.0
@@ -297,7 +297,7 @@ class TestBackwardCompatibility:
     async def test_set_current_behavior_still_works_in_coordinator(
         self, hass: HomeAssistant, mock_config_entry_fallback: MockConfigEntry
     ) -> None:
-        """Set-current mode (existing config entries) applies the global fallback current when meter is unavailable."""
+        """Legacy set-current mode maintains charging at configured global fallback rate during meter outages."""
         await setup_integration(hass, mock_config_entry_fallback)
 
         current_set_id = get_entity_id(hass, mock_config_entry_fallback, "sensor", "current_set")
