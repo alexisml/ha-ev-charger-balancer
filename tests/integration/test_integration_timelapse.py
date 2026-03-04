@@ -445,13 +445,14 @@ class TestTwoChargerEqualPriorityTimelapse:
 
     Steps
     -----
-    1.  Idle → both chargers start at 16 A (capped at max, plenty of headroom).
+    1.  Idle → 100 W on meter (~31.6 A available); each charger gets 15 A
+        (31.6 / 2 = 15.8 A, floored to 15 A).
     2.  Load spike → available drops to 14 A; each charger reduces to 7 A.
-    3.  Bigger spike → available drops below combined minimum; both stop.
+    3.  Bigger spike → available drops below combined minimum (4 A); both stop.
     4.  Load eases to 9 A; ramp-up cooldown still active → both chargers stay stopped.
     5.  Ramp-up cooldown expires → tie-break: charger[0] resumes at 9 A, charger[1]
         stays stopped (0 A remaining is below the 6 A minimum).
-    6.  Load drops significantly → both chargers return to their 16 A maximum.
+    6.  Load eases to 22 A available → both chargers at 11 A each.
 
     Uses two equal-priority chargers (50/50) with a 16 A maximum per charger and
     a 30-second ramp-up cooldown.
@@ -598,15 +599,16 @@ class TestTwoChargerWeightedPriorityTimelapse:
 
     Steps
     -----
-    1.  Both chargers start — abundant headroom; both capped at 16 A max.
-    2.  Load rises → 30 A available; 60/40 split gives A=18 A→capped 16 A, B=14 A.
-    3.  Load rises further → 18 A available; 60/40 gives A≈10 A, B≈7 A.
-    4.  Larger load spike → 9 A available; both shares below min → tie-break:
-        A (higher weight, 60 %) takes all 9 A; B stops.
-    5.  Load eases → 20 A available; A resumes at 12 A (60 %), B resumes at 8 A (40 %).
-    6.  Load drops to near-zero → both cap at 16 A max.
+    1.  Idle → abundant headroom (~31.6 A available); both chargers cap at 16 A.
+    2.  Load rises → 18 A available; 60/40 gives A=10 A (floor), B=7 A (floor).
+    3.  Large spike → 9 A available; both shares below 6 A min → tie-break:
+        A (60 %) takes all 9 A; B stops.
+    4.  Load eases to 20 A but cooldown still active (5 s < 30 s) →
+        A stays at 9 A, B stays stopped.
+    5.  Cooldown expires → A=12 A (60 %), B=8 A (40 %).
+    6.  Load near-zero (31 A available) → A caps at 16 A, B gets surplus: 15 A.
 
-    Uses a 30 A service limit, two chargers at 60/40 priority, 16 A max each.
+    Uses a 32 A service limit, two chargers at 60/40 priority, 16 A max each.
     """
 
     async def test_two_charger_weighted_priority_timelapse(
