@@ -687,6 +687,7 @@ class TestNotChargingCurrentClamp:
     STATUS_ENTITY = "sensor.ocpp_status"
 
     def _make_entry(self) -> MockConfigEntry:
+        """Return a config entry with the status sensor configured."""
         return MockConfigEntry(
             domain=DOMAIN,
             data={
@@ -786,6 +787,7 @@ class TestChargingStartRampUp:
     STATUS_ENTITY = "sensor.ocpp_status"
 
     def _make_entry(self) -> MockConfigEntry:
+        """Return a config entry with the status sensor configured."""
         return MockConfigEntry(
             domain=DOMAIN,
             data={

@@ -68,9 +68,9 @@ class TestChargerStatusSensorMidSession:
         current_set_id = get_entity_id(hass, entry, "sensor", "current_set")
         available_id = get_entity_id(hass, entry, "sensor", "available_current")
 
-        # Phase 1: House-only load (5 A), sensor=Charging, EV not drawing yet (current_set=0)
-        # meter = 5*230 = 1150 W → ev_estimate=0, non_ev=5, available=27 → target=27 A
-        # EV is charging → no min_ev_current cap
+        # Phase 1: House-only load (5 A), sensor=Charging, meter shows EV draw = 0 A
+        # meter = 5*230 = 1150 W → ev_estimate=0, non_ev=5, available=27 → target commanded current=27 A (ramped up from 0 A)
+        # EV is considered charging by status sensor → no min_ev_current cap applies
         hass.states.async_set(POWER_METER, meter_w(5.0, 0.0))  # 1150 W
         await hass.async_block_till_done()
         assert float(hass.states.get(current_set_id).state) == 27.0
