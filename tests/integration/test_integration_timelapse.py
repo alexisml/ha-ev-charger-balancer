@@ -737,9 +737,9 @@ class TestTwoChargerWeightedPriorityTimelapse:
         assert hass.states.get(state_id).state == STATE_ADJUSTING
 
         # -------------------------------------------------------------------
-        # Step 6: Load near-zero → both cap at 16 A max
-        # available ≈ 31.6 A; A: 60%=19A→cap 16A; B gets surplus: extra goes to B
-        # Both end up at 16 A (similar to step 1 but from the other direction)
+        # Step 6: Load near-zero → A caps at 16 A max, surplus goes to B
+        # available ≈ 31 A; A: 60%=18.6A→cap 16A; surplus 15A → B gets 15A
+        # Result: A=16 A, B=15 A
         # elapsed = 3065 - 3020 = 45 s → no cooldown restriction
         # -------------------------------------------------------------------
         mock_time = 3065.0
