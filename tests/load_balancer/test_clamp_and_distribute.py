@@ -470,6 +470,24 @@ class TestDistributeCurrentWeightedCapRedistribution:
         )
         assert result == [32.0, 16.0]
 
+    def test_below_min_in_proportional_split_becomes_viable_after_cap(self):
+        """A charger below its minimum in the proportional split charges normally once cap surplus frees enough headroom.
+
+        The lower-weight charger appears below minimum in the initial proportional
+        allocation (weight 10 → 1.2 A out of 12 A), but after the higher-weight
+        charger is capped at its 6 A maximum the freed headroom (6 A remaining)
+        is exactly enough for the lower charger's minimum.  Both chargers should
+        charge at 6 A rather than the lower one being incorrectly stopped.
+        """
+        # A: weight=90, max=6 A, min=6 A; B: weight=10, max=32 A, min=6 A; available=12 A
+        # Round 1 proportional: A=10.8 (→ capped at 6), B=1.2 (appears below min=6)
+        # After cap settle: remaining=6 A; B recomputed share=6 A ≥ min=6 A → viable
+        result = distribute_current_weighted(
+            available_a=12.0, chargers=[(6.0, 6.0, 90), (6.0, 32.0, 10)]
+        )
+        assert result[0] == 6.0
+        assert result[1] == 6.0
+
 
 class TestDistributeCurrentWeightedStopConditions:
     """Verify that chargers below their minimum are stopped and their share is redistributed."""

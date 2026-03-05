@@ -437,7 +437,20 @@ def distribute_current_weighted(
             break
 
         remaining = _settle_weighted_capped(capped, chargers, step_a, active, allocations, remaining)
-        _apply_weighted_priority_tiebreak(below_min, chargers, active, allocations, remaining, step_a)
+
+        if active:
+            # After settling capped chargers, *active* and *remaining* may have changed.
+            # When any caps were applied, recompute shares and below-min classification
+            # so that the priority tie-breaker operates on the updated state.
+            if capped:
+                shares = _compute_weighted_shares(active, chargers, remaining)
+                _, below_min = _classify_weighted_chargers(
+                    active,
+                    chargers,
+                    shares,
+                    step_a,
+                )
+            _apply_weighted_priority_tiebreak(below_min, chargers, active, allocations, remaining, step_a)
 
     return allocations
 
