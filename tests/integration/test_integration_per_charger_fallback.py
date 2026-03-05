@@ -5,7 +5,6 @@ mode, each charger operates at its individually configured safe rate rather than
 a single global value.
 """
 
-from unittest.mock import patch
 
 from homeassistant.core import HomeAssistant
 
@@ -24,15 +23,12 @@ from custom_components.ev_lb.const import (
     REASON_FALLBACK_UNAVAILABLE,
     REASON_POWER_METER_UPDATE,
     UNAVAILABLE_BEHAVIOR_PER_CHARGER,
-    UNAVAILABLE_BEHAVIOR_STOP,
 )
 from conftest import (
     POWER_METER,
     setup_integration,
     get_entity_id,
     collect_events,
-    PN_CREATE,
-    PN_DISMISS,
 )
 
 
@@ -161,7 +157,7 @@ class TestPerChargerFallbackSingleCharger:
 
 
 class TestPerChargerFallbackMultiCharger:
-    """Multi-charger load balancing during power meter outages — each charger operates independently at its configured fallback rate."""
+    """Multi-charger balancing during meter outages — each charger operates at its configured fallback rate."""
 
     async def test_two_chargers_get_independent_fallback_currents(
         self, hass: HomeAssistant

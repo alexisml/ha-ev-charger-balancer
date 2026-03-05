@@ -471,7 +471,7 @@ class TestDistributeCurrentWeightedCapRedistribution:
         assert result == [32.0, 16.0]
 
     def test_below_min_in_proportional_split_becomes_viable_after_cap(self):
-        """A charger below its minimum in the proportional split charges normally once cap surplus frees enough headroom.
+        """Charger below min in proportional split charges once cap surplus frees enough headroom.
 
         The lower-weight charger appears below minimum in the initial proportional
         allocation (weight 10 → 1.2 A out of 12 A), but after the higher-weight
