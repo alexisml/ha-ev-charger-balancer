@@ -76,7 +76,6 @@ from .load_balancer import (
     apply_ramp_up_limit,
     clamp_current,
     clamp_to_safe_output,
-    compute_fallback_reapply,
     distribute_current_weighted,
     resolve_balancer_state,
     resolve_fallback_current,
@@ -547,25 +546,16 @@ class EvLoadBalancerCoordinator:
 
     @callback
     def manual_set_limit(self, current_a: float) -> None:
-        """Manually set the charger current, bypassing the balancing algorithm.
+        """Manually set the total charger current for this entry, bypassing the balancing algorithm.
 
-        The requested current is clamped to the charger's min/max limits.
-        If the clamped value falls below the minimum EV current, charging
-        is stopped (target set to 0 A).  The override is one-shot: the
-        next power-meter event will resume normal automatic balancing.
+        *current_a* is treated as an aggregate limit for the entire config entry.
+        It is split equally across all configured chargers by ``_update_and_notify``,
+        subject to per-charger maximums and the service limit.  If the resulting
+        per-charger share is below the minimum EV current, charging is stopped.
+        The override is one-shot: the next power-meter event resumes automatic balancing.
         """
-        clamped = clamp_current(
-            current_a,
-            self.max_charger_current,
-            self.min_ev_current,
-        )
-        target = 0.0 if clamped is None else clamped
-        _LOGGER.debug(
-            "Manual override: requested=%.1f A, clamped=%.1f A",
-            current_a,
-            target,
-        )
-        self._update_and_notify(self.available_current_a, target, REASON_MANUAL_OVERRIDE)
+        _LOGGER.debug("Manual override: requested=%.1f A (aggregate)", current_a)
+        self._update_and_notify(self.available_current_a, max(current_a, 0.0), REASON_MANUAL_OVERRIDE)
 
     # ------------------------------------------------------------------
     # Fallback for unavailable power meter
@@ -586,8 +576,8 @@ class EvLoadBalancerCoordinator:
           transitioning from active to stopped).
         - **set_current**: recomputes ``min(fallback, new_max_charger)`` and
           updates the charger if the capped value differs.
-        - **ignore**: re-clamps ``current_set_a`` to the new charger limits
-          and updates if the value has changed.
+        - **ignore**: re-clamps each charger's held current to the new limits
+          and updates if any value has changed.
         - **per_charger**: re-caps each charger's fallback at the updated
           ``max_charger_current`` and reapplies the per-charger amounts.
         """
@@ -595,21 +585,52 @@ class EvLoadBalancerCoordinator:
             self._apply_per_charger_fallback(reason=REASON_PARAMETER_CHANGE)
             return
 
-        target = compute_fallback_reapply(
-            self._unavailable_behavior,
-            self._unavailable_fallback_a,
-            self.max_charger_current,
-            self.current_set_a,
-            self.min_ev_current,
-        )
+        if self._unavailable_behavior == "ignore":
+            # Re-clamp each charger's individually held current to the updated limits,
+            # preserving per-charger differences (ramp or priority) from the last recompute.
+            per_charger_finals: list[float] = []
+            for ch in self._chargers:
+                clamped = clamp_current(ch.current_set_a, self.max_charger_current, self.min_ev_current)
+                per_charger_finals.append(0.0 if clamped is None else clamped)
+            target = sum(per_charger_finals)
+            if target != self.current_set_a:
+                _LOGGER.debug(
+                    "Fallback current updated after parameter change: %.1f A → %.1f A",
+                    self.current_set_a,
+                    target,
+                )
+                self._update_and_notify(
+                    self.available_current_a,
+                    target,
+                    REASON_PARAMETER_CHANGE,
+                    per_charger_finals=per_charger_finals,
+                )
+            else:
+                async_dispatcher_send(self.hass, self.signal_update)
+            return
 
+        if self._unavailable_behavior == "set_current":
+            per_charger = min(self._unavailable_fallback_a, self.max_charger_current)
+            if 0 < per_charger < self.min_ev_current:
+                per_charger = 0.0
+            per_charger_finals = [per_charger for _ in self._chargers]
+        else:
+            # "stop" or any unrecognised value
+            per_charger_finals = [0.0 for _ in self._chargers]
+
+        target = sum(per_charger_finals)
         if target != self.current_set_a:
             _LOGGER.debug(
                 "Fallback current updated after parameter change: %.1f A → %.1f A",
                 self.current_set_a,
                 target,
             )
-            self._update_and_notify(self.available_current_a, target, REASON_PARAMETER_CHANGE)
+            self._update_and_notify(
+                self.available_current_a,
+                target,
+                REASON_PARAMETER_CHANGE,
+                per_charger_finals=per_charger_finals,
+            )
         else:
             async_dispatcher_send(self.hass, self.signal_update)
 
@@ -631,7 +652,7 @@ class EvLoadBalancerCoordinator:
             # Ignore mode — keep last value, just update sensor state
             async_dispatcher_send(self.hass, self.signal_update)
             return
-        self._update_and_notify(0.0, fallback, REASON_FALLBACK_UNAVAILABLE)
+        self._update_and_notify(0.0, fallback * max(1, len(self._chargers)), REASON_FALLBACK_UNAVAILABLE)
 
     def _apply_per_charger_fallback(
         self, reason: str = REASON_FALLBACK_UNAVAILABLE
@@ -718,7 +739,7 @@ class EvLoadBalancerCoordinator:
         over-subtracting headroom when the charger is idle, paused, or finished.
         """
         if charger.status_entity is None:
-            return True  # No sensor configured; assume charging when current > 0
+            return charger.current_set_a > 0  # No sensor configured; assume charging when current > 0
         state = self.hass.states.get(charger.status_entity)
         if state is None or state.state in ("unavailable", "unknown"):
             return True  # Sensor unavailable; safe fallback — assume charging
@@ -931,11 +952,12 @@ class EvLoadBalancerCoordinator:
 
         When *per_charger_finals* is provided (multi-charger recompute path),
         per-charger state is updated before scheduling actions.  When absent
-        (fallback / manual override paths), *current_a* is a per-charger value
-        supplied by the caller (already clamped to charger limits) and is
-        applied identically to every charger; the aggregate ``current_set_a``
-        is then set to ``per_charger_value × n_chargers`` so state sensors
-        accurately reflect the total current being commanded.
+        (fallback / manual override paths), *current_a* is treated as an
+        **aggregate** limit for the entire config entry; it is split equally
+        across all configured chargers, subject to the per-charger maximum,
+        whole-amp step floor, and minimum EV current guard.  The coordinator's
+        ``current_set_a`` is always updated to the final aggregate total so
+        state sensors accurately reflect the total current being commanded.
 
         A defense-in-depth safety clamp ensures the output never exceeds
         the service or charger limits, even if upstream logic has a bug.
@@ -1010,27 +1032,26 @@ class EvLoadBalancerCoordinator:
             # Ensure current_a reflects the actual aggregate being commanded.
             current_a = float(aggregate_int)
         else:
-            # Fallback / manual path: current_a is a per-charger value (already clamped
-            # by the caller); apply the same current to every charger and recompute the
-            # aggregate so state sensors accurately reflect the total being commanded.
-            per_charger_value = min(max(current_a, 0.0), self.max_charger_current)
-            aggregate = per_charger_value * n_chargers
-            # Clamp the aggregate to the service limit: n_chargers × per-charger value can
-            # exceed the service breaker even though each per-charger value is within its
-            # individual maximum.
-            if aggregate > self._max_service_current and self._max_service_current > 0:
-                # Floor to whole-amp steps so the per-charger value stays on a
-                # valid increment (fractional amps would violate the 1 A step
-                # behaviour expected by charger scripts).
-                per_charger_value = self._max_service_current // n_chargers
-                aggregate = per_charger_value * n_chargers
-            # Ensure any per-charger value is either 0 A (stop) or at/above the
-            # minimum EV current. This prevents commanding unsafe low currents when
-            # the service limit is tight relative to the number of chargers
-            # (e.g. 10 A service / 2 chargers = 5 A < 6 A min → stop both).
+            # Fallback / manual path: current_a is an aggregate value for this config
+            # entry. Split equally across all chargers, respecting per-charger limits.
+            requested_aggregate = max(current_a, 0.0)
+            # Service-limit guard (defense-in-depth; clamp_to_safe_output above already
+            # handles the normal path, but the aggregate may still exceed the limit when
+            # a per-charger fallback value was multiplied by the number of chargers before
+            # being passed here, e.g. in _apply_fallback_current for set_current mode).
+            if self._max_service_current > 0 and requested_aggregate > self._max_service_current:
+                requested_aggregate = float(self._max_service_current)
+            # Equal per-charger share from the aggregate, capped at the per-charger max.
+            # n_chargers is always >= 1 (ensured by max(1, ...) above) so no zero-division risk.
+            per_charger_value = requested_aggregate / n_chargers
+            per_charger_value = min(per_charger_value, self.max_charger_current)
+            # Floor to whole-amp steps (charger scripts expect integer ampere steps).
+            per_charger_value = float(int(per_charger_value))
+            # Minimum safe current: either 0 A (stop) or >= min_ev_current.
+            # (e.g. 10 A service / 2 chargers = 5 A < 6 A min → stop both)
             if 0 < per_charger_value < self.min_ev_current:
                 per_charger_value = 0.0
-                aggregate = 0.0
+            aggregate = per_charger_value * n_chargers
             for charger in self._chargers:
                 charger.active = per_charger_value > 0
                 charger.current_set_a = per_charger_value
@@ -1065,6 +1086,10 @@ class EvLoadBalancerCoordinator:
                 self._execute_actions(prev_charger_actives, prev_charger_currents),
                 eager_start=False,
             )
+
+        # Refresh the ev_charging diagnostic so the binary sensor accurately reflects
+        # the new per-charger current_set_a values set above (not the pre-recompute state).
+        self._refresh_ev_charging()
 
         async_dispatcher_send(self.hass, self.signal_update)
 

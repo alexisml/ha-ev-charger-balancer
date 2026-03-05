@@ -295,7 +295,12 @@ class TestBinarySensorEntity:
     async def test_ev_charging_binary_sensor_initial_value(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """EV charging binary sensor starts as on (assumes charging until meter update proves otherwise)."""
+        """EV charging binary sensor starts as off before any current has been commanded.
+
+        Without a status sensor, ev_charging reflects whether current_set_a > 0.
+        At startup the charger had not yet received any current command (current_set_a = 0),
+        so the diagnostic correctly reports off until the first meter event assigns current.
+        """
         await setup_integration(hass, mock_config_entry)
 
         ent_reg = er.async_get(hass)
@@ -305,7 +310,7 @@ class TestBinarySensorEntity:
         assert entity_id is not None
         state = hass.states.get(entity_id)
         assert state is not None
-        assert state.state == "on"
+        assert state.state == "off"
 
 
 # ---------------------------------------------------------------------------

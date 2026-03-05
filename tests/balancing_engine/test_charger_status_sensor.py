@@ -13,7 +13,7 @@ Covers:
 - EV throttling (battery near full) does not lock coordinator at max amps
 - ev_charging diagnostic sensor reflects charger status changes
 - ev_charging sensor stays on when status sensor is unavailable/unknown
-- ev_charging sensor is always on when no status sensor is configured
+- ev_charging sensor stays on while charger is commanding current (no status sensor)
 - coordinator.ev_charging attribute is updated correctly on each recompute
 - ev_charging diagnostic updates immediately on status change (no meter event needed)
 - ev_charging diagnostic is initialized from the charger status state at startup (hot-load path)
@@ -367,11 +367,12 @@ class TestThrottledEvFix:
     async def test_ev_treated_as_charging_when_no_status_sensor_configured(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """EV charging sensor stays on throughout when no status sensor is configured.
+        """EV charging sensor stays on as long as the charger is commanding positive current.
 
-        Without a status sensor the coordinator always treats the EV as drawing
-        current, so the ev_charging diagnostic sensor must report on at every
-        meter update.
+        Without a status sensor, the coordinator bases the ev_charging diagnostic on
+        whether ``current_set_a > 0``.  For all meter readings that leave headroom for
+        charging (1 kW, 5 kW, 7.36 kW at 32 A service), the balancer allocates a
+        positive current, so the ev_charging sensor must report ``on`` after each event.
         """
         await setup_integration(hass, mock_config_entry)
 
@@ -488,9 +489,8 @@ class TestChargerStatusSensorSubscription:
         """The diagnostic remains stable and is not affected by unrelated entity state changes
         when no charger status sensor is configured.
 
-        When no charger status sensor is configured, the operator always sees
-        ev_charging as on — the integration has no external signal to trigger a
-        change, so unrelated sensor activity must never flip the diagnostic off.
+        When no charger status sensor is configured, ev_charging reflects whether
+        current_set_a > 0.  Unrelated sensor activity must never flip the diagnostic.
         """
         await setup_integration(hass, mock_config_entry)
 
