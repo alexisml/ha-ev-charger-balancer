@@ -63,7 +63,14 @@ def _register_services(hass: HomeAssistant) -> None:
         )
         if target_entry_id is not None:
             target_entry = hass.config_entries.async_get_entry(target_entry_id)
-            if target_entry is None or not hasattr(target_entry, "runtime_data"):
+            if (
+                target_entry is None
+                or target_entry.domain != DOMAIN
+                or not isinstance(
+                    getattr(target_entry, "runtime_data", None),
+                    EvLoadBalancerCoordinator,
+                )
+            ):
                 _LOGGER.warning(
                     "Service %s.%s: entry_id '%s' not found",
                     DOMAIN,
