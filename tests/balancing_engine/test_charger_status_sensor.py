@@ -7,17 +7,20 @@ balancer does not over-subtract headroom when the charger is idle.
 
 Covers:
 - Available headroom is not over-subtracted when EV is not charging
+- Commanded current is capped at min_ev_current when EV is not charging
 - Available headroom correctly accounts for EV draw when sensor = Charging
 - Behaviour is unchanged when no status sensor is configured
 - Status sensor set via the options flow is honoured by the coordinator
 - EV throttling (battery near full) does not lock coordinator at max amps
 - ev_charging diagnostic sensor reflects charger status changes
 - ev_charging sensor stays on when status sensor is unavailable/unknown
-- ev_charging sensor is always on when no status sensor is configured
+- ev_charging sensor stays on while charger is commanding current (no status sensor)
 - coordinator.ev_charging attribute is updated correctly on each recompute
 - ev_charging diagnostic updates immediately on status change (no meter event needed)
 - ev_charging diagnostic is initialized from the charger status state at startup (hot-load path)
 - ev_charging diagnostic is initialized from the charger status state during HA boot (boot path)
+- ramp-up cooldown is applied when EV transitions from not-charging to charging
+- sensor glitches to unknown/unavailable do not reset the ramp-up cooldown
 """
 
 from unittest.mock import patch, PropertyMock
@@ -32,9 +35,29 @@ from custom_components.ev_lb.const import (
     CONF_MAX_SERVICE_CURRENT,
     CONF_POWER_METER_ENTITY,
     CONF_VOLTAGE,
+    DEFAULT_MIN_EV_CURRENT,
     DOMAIN,
 )
 from conftest import POWER_METER, setup_integration, get_entity_id
+
+
+def _make_status_sensor_entry(status_entity: str) -> MockConfigEntry:
+    """Return a config entry with the given charger status sensor configured.
+
+    All tests that need a single power meter and a charger status sensor
+    should use this factory rather than repeating the same MockConfigEntry
+    construction.
+    """
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_POWER_METER_ENTITY: POWER_METER,
+            CONF_VOLTAGE: 230.0,
+            CONF_MAX_SERVICE_CURRENT: 32.0,
+            CONF_CHARGER_STATUS_ENTITY: status_entity,
+        },
+        title="EV Load Balancing",
+    )
 
 
 class TestChargerStatusSensor:
@@ -49,12 +72,14 @@ class TestChargerStatusSensor:
     async def test_headroom_not_over_subtracted_when_ev_not_charging(
         self, hass: HomeAssistant
     ) -> None:
-        """Available headroom reflects full service capacity when EV is not actively charging.
+        """Headroom is correctly computed and commanded current is capped at min_ev_current when EV is not charging.
 
-        If the charger reports it is NOT charging (state != 'Charging'), the
-        balancer must not subtract the previously commanded current from the
-        available headroom.  This prevents the balancer from under-reporting
-        headroom when the EV has finished charging or is paused.
+        When the charger reports NOT charging (state != 'Charging'), the balancer
+        must not subtract the previously commanded current from the available
+        headroom — it correctly treats the full service draw as non-EV load.
+        The commanded current is capped at ``min_ev_current`` regardless of how
+        much headroom is available, so the charger idles at the safe minimum
+        rather than advertising the full available capacity to an idle EV.
         """
         status_entity = "sensor.ocpp_status"
         entry = MockConfigEntry(
@@ -74,13 +99,19 @@ class TestChargerStatusSensor:
         await hass.async_block_till_done()
 
         current_set_id = get_entity_id(hass, entry, "sensor", "current_set")
+        available_id = get_entity_id(hass, entry, "sensor", "available_current")
 
-        # 5 kW load at 230 V → 21.7 A draw → headroom = 32 - 21.7 = 10.3 → 10 A
-        # EV is not charging, so current_set_a estimate is 0 (not subtracted)
+        # 5 kW load at 230 V → 21.7 A draw → headroom = 32 - 21.7 = 10.3 A
+        # EV is not charging, so current_set_a estimate is 0 (not over-subtracted).
+        # The commanded current is capped at min_ev_current (6 A default) even
+        # though the raw headroom is 10 A.
         hass.states.async_set(POWER_METER, "5000")
         await hass.async_block_till_done()
 
-        assert float(hass.states.get(current_set_id).state) == 10.0
+        # Available headroom is correctly computed (no over-subtraction)
+        assert abs(float(hass.states.get(available_id).state) - (32.0 - 5000.0 / 230.0)) < 0.1
+        # Commanded current is capped at min_ev_current while EV is not charging
+        assert float(hass.states.get(current_set_id).state) == DEFAULT_MIN_EV_CURRENT
 
     async def test_headroom_accounts_for_ev_draw_when_charging(
         self, hass: HomeAssistant
@@ -367,11 +398,12 @@ class TestThrottledEvFix:
     async def test_ev_treated_as_charging_when_no_status_sensor_configured(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """EV charging sensor stays on throughout when no status sensor is configured.
+        """EV charging sensor stays on as long as the charger is commanding positive current.
 
-        Without a status sensor the coordinator always treats the EV as drawing
-        current, so the ev_charging diagnostic sensor must report on at every
-        meter update.
+        Without a status sensor, the coordinator bases the ev_charging diagnostic on
+        whether ``current_set_a > 0``.  For all meter readings that leave headroom for
+        charging (1 kW, 5 kW, 7.36 kW at 32 A service), the balancer allocates a
+        positive current, so the ev_charging sensor must report ``on`` after each event.
         """
         await setup_integration(hass, mock_config_entry)
 
@@ -488,9 +520,8 @@ class TestChargerStatusSensorSubscription:
         """The diagnostic remains stable and is not affected by unrelated entity state changes
         when no charger status sensor is configured.
 
-        When no charger status sensor is configured, the operator always sees
-        ev_charging as on — the integration has no external signal to trigger a
-        change, so unrelated sensor activity must never flip the diagnostic off.
+        When no charger status sensor is configured, ev_charging reflects whether
+        current_set_a > 0.  Unrelated sensor activity must never flip the diagnostic.
         """
         await setup_integration(hass, mock_config_entry)
 
@@ -522,16 +553,7 @@ class TestChargerStatusOnStartup:
 
     def _make_entry(self) -> MockConfigEntry:
         """Return a config entry with the status sensor configured."""
-        return MockConfigEntry(
-            domain=DOMAIN,
-            data={
-                CONF_POWER_METER_ENTITY: POWER_METER,
-                CONF_VOLTAGE: 230.0,
-                CONF_MAX_SERVICE_CURRENT: 32.0,
-                CONF_CHARGER_STATUS_ENTITY: self.STATUS_ENTITY,
-            },
-            title="EV Load Balancing",
-        )
+        return _make_status_sensor_entry(self.STATUS_ENTITY)
 
     async def test_ev_charging_off_when_charger_suspended_at_startup(
         self, hass: HomeAssistant
@@ -590,16 +612,7 @@ class TestChargerStatusBootPath:
 
     def _make_entry(self) -> MockConfigEntry:
         """Return a config entry with the status sensor configured."""
-        return MockConfigEntry(
-            domain=DOMAIN,
-            data={
-                CONF_POWER_METER_ENTITY: POWER_METER,
-                CONF_VOLTAGE: 230.0,
-                CONF_MAX_SERVICE_CURRENT: 32.0,
-                CONF_CHARGER_STATUS_ENTITY: self.STATUS_ENTITY,
-            },
-            title="EV Load Balancing",
-        )
+        return _make_status_sensor_entry(self.STATUS_ENTITY)
 
     async def test_ev_charging_off_at_ha_boot_healthy_meter_suspended_charger(
         self, hass: HomeAssistant
@@ -661,3 +674,272 @@ class TestChargerStatusBootPath:
         await hass.async_block_till_done()
 
         assert hass.states.get(ev_charging_id).state == "off"
+
+
+class TestNotChargingCurrentClamp:
+    """Verify the commanded current is capped at min_ev_current when the EV is not charging.
+
+    When the charger status sensor reports a non-'Charging' state the balancer
+    advertises at most ``min_ev_current`` to the charger.  This ensures the EV
+    sees only the minimum safe current level while idle, regardless of how much
+    headroom the service limit provides.  When the EV starts charging the
+    current rises from this safe floor via the normal ramp-up mechanism.
+    """
+
+    STATUS_ENTITY = "sensor.ocpp_status"
+
+    def _make_entry(self) -> MockConfigEntry:
+        """Return a config entry with the status sensor configured."""
+        return _make_status_sensor_entry(self.STATUS_ENTITY)
+
+    async def test_commanded_current_capped_at_min_when_ev_not_charging(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Charger idles at min_ev_current even when the service has abundant headroom.
+
+        With 26 A of available headroom (only 1.38 A non-EV load), the balancer
+        would normally command the charger to draw up to 26 A.  Because the EV
+        status sensor reports the EV is not charging, the commanded current is
+        capped at min_ev_current (6 A default) instead.
+        """
+        entry = self._make_entry()
+        hass.states.async_set(POWER_METER, "0")
+        hass.states.async_set(self.STATUS_ENTITY, "Available")
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        current_set_id = get_entity_id(hass, entry, "sensor", "current_set")
+
+        # Very low house load: 318 W at 230 V → 1.38 A draw → available = 30.62 A → 30 A raw.
+        # With cap: commanded = min_ev_current = 6 A (EV not charging).
+        hass.states.async_set(POWER_METER, "318")
+        await hass.async_block_till_done()
+
+        assert float(hass.states.get(current_set_id).state) == DEFAULT_MIN_EV_CURRENT
+
+    async def test_commanded_current_zero_when_headroom_below_min(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Charger stays stopped when there is not enough headroom, even while EV is not charging.
+
+        When the non-EV load already consumes so much capacity that headroom
+        falls below min_ev_current, the commanded current is 0 A — the EV
+        cannot charge safely even at the minimum level.
+        """
+        entry = self._make_entry()
+        hass.states.async_set(POWER_METER, "0")
+        hass.states.async_set(self.STATUS_ENTITY, "Available")
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        current_set_id = get_entity_id(hass, entry, "sensor", "current_set")
+
+        # 7590 W at 230 V ≈ 33 A > 32 A service limit → negative headroom → stop
+        hass.states.async_set(POWER_METER, "7590")
+        await hass.async_block_till_done()
+
+        assert float(hass.states.get(current_set_id).state) == 0.0
+
+    async def test_capping_does_not_apply_when_ev_is_charging(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Full available headroom is commanded when the EV is actively charging.
+
+        When the charger status reports 'Charging', the balancer commands the
+        full computed available current — the min_ev_current cap is not applied.
+        """
+        entry = self._make_entry()
+        hass.states.async_set(POWER_METER, "0")
+        hass.states.async_set(self.STATUS_ENTITY, "Charging")
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        current_set_id = get_entity_id(hass, entry, "sensor", "current_set")
+
+        # 3 kW at 230 V ≈ 13.04 A non-EV load → available = 18.96 → 18 A
+        # EV is charging, so no cap — commanded = 18 A
+        hass.states.async_set(POWER_METER, "3000")
+        await hass.async_block_till_done()
+
+        assert float(hass.states.get(current_set_id).state) == 18.0
+
+
+class TestChargingStartRampUp:
+    """Verify that starting to charge triggers a ramp-up from min_ev_current.
+
+    When the EV transitions from not-charging to charging the coordinator
+    resets the ramp-up cooldown so the current rises gradually from
+    min_ev_current rather than jumping immediately to the full available
+    headroom.  This mirrors the ramp-up behaviour used during normal
+    load-balancing adjustments.
+    """
+
+    STATUS_ENTITY = "sensor.ocpp_status"
+
+    def _make_entry(self) -> MockConfigEntry:
+        """Return a config entry with the status sensor configured."""
+        return _make_status_sensor_entry(self.STATUS_ENTITY)
+
+    def _wire_mock_time(self, coordinator, initial_time: float = 1000.0):
+        """Wire a controllable monotonic clock into the coordinator.
+
+        Returns a setter function; call it with a new timestamp to advance
+        the coordinator's internal clock between test steps without referencing
+        a shared mutable variable directly.
+        """
+        tick: list[float] = [initial_time]
+
+        def fake_monotonic() -> float:
+            return tick[0]
+
+        coordinator._time_fn = fake_monotonic
+
+        def set_time(t: float) -> None:
+            tick[0] = t
+
+        return set_time
+
+    async def test_current_held_at_min_immediately_after_ev_starts_charging(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Current is held at min_ev_current on the first meter event after the EV starts charging.
+
+        The operator sees the charger remain at 6 A on the first power-meter
+        reading after the status sensor flips to 'Charging', rather than
+        immediately jumping to the full 26 A of available headroom.  The
+        ramp-up cooldown must prevent any increase until the configured
+        ramp_up_time has elapsed.
+        """
+        entry = self._make_entry()
+        hass.states.async_set(POWER_METER, "0")
+        hass.states.async_set(self.STATUS_ENTITY, "Available")
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+        coordinator.ramp_up_time_s = 30.0
+        set_time = self._wire_mock_time(coordinator)
+
+        current_set_id = get_entity_id(hass, entry, "sensor", "current_set")
+
+        # Step 1: EV not charging — commanded at min_ev_current (6 A)
+        hass.states.async_set(POWER_METER, "318")
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == DEFAULT_MIN_EV_CURRENT
+
+        # Step 2: EV starts charging (status change fires before next meter event)
+        # The coordinator resets the ramp-up cooldown at this moment (t=1001).
+        set_time(1001.0)
+        hass.states.async_set(self.STATUS_ENTITY, "Charging")
+        await hass.async_block_till_done()
+
+        # Step 3: First meter event while charging — should be held at min_ev_current
+        # because only 4 s have elapsed since the EV started charging (< 30 s cooldown).
+        set_time(1005.0)
+        hass.states.async_set(POWER_METER, "319")
+        await hass.async_block_till_done()
+
+        # Still held at 6 A (the ramp-up cooldown blocks the jump to full headroom)
+        assert float(hass.states.get(current_set_id).state) == DEFAULT_MIN_EV_CURRENT
+
+    async def test_current_increases_after_ramp_up_cooldown_elapses(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Current rises above min_ev_current once the ramp-up cooldown has elapsed after EV starts.
+
+        After the EV has been charging continuously for longer than
+        ramp_up_time_s the balancer allows the current to increase toward the
+        full available headroom, just as it would during normal load-balancing.
+        """
+        entry = self._make_entry()
+        hass.states.async_set(POWER_METER, "0")
+        hass.states.async_set(self.STATUS_ENTITY, "Available")
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+        coordinator.ramp_up_time_s = 30.0
+        set_time = self._wire_mock_time(coordinator)
+
+        current_set_id = get_entity_id(hass, entry, "sensor", "current_set")
+
+        # Step 1: EV not charging — idling at min_ev_current
+        hass.states.async_set(POWER_METER, "318")
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == DEFAULT_MIN_EV_CURRENT
+
+        # Step 2: EV starts charging at t=1001
+        set_time(1001.0)
+        hass.states.async_set(self.STATUS_ENTITY, "Charging")
+        await hass.async_block_till_done()
+
+        # Step 3: Meter event after cooldown has elapsed (t=1032, 31 s > 30 s)
+        # Now current should be allowed to rise above min_ev_current.
+        set_time(1032.0)
+        hass.states.async_set(POWER_METER, "319")
+        await hass.async_block_till_done()
+
+        assert float(hass.states.get(current_set_id).state) > DEFAULT_MIN_EV_CURRENT
+
+    async def test_sensor_glitch_to_unknown_does_not_reset_ramp_up_cooldown(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A sensor glitch to unknown/unavailable does not reset the ramp-up cooldown.
+
+        When the charger status sensor momentarily loses contact and reports
+        unknown or unavailable, the coordinator must not treat this as an EV-start
+        event.  If it did, the ramp-up cooldown would be incorrectly reset on every
+        sensor glitch, unnecessarily extending ramp-up holds and delaying increases
+        in charging current the next time the EV genuinely starts charging.
+        """
+        entry = self._make_entry()
+        hass.states.async_set(POWER_METER, "0")
+        hass.states.async_set(self.STATUS_ENTITY, "Available")
+        entry.add_to_hass(hass)
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+        coordinator.ramp_up_time_s = 30.0
+        set_time = self._wire_mock_time(coordinator)
+
+        current_set_id = get_entity_id(hass, entry, "sensor", "current_set")
+
+        # Step 1: EV not charging — idling at min_ev_current
+        hass.states.async_set(POWER_METER, "318")
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == DEFAULT_MIN_EV_CURRENT
+
+        # Step 2: Sensor glitches to unknown at t=1001.  The safe fallback maps
+        # unknown → ev_charging=True, so the idle clamp no longer applies.
+        set_time(1001.0)
+        hass.states.async_set(self.STATUS_ENTITY, "unknown")
+        await hass.async_block_till_done()
+
+        # Step 3: Sensor glitches to unavailable at t=1002.
+        set_time(1002.0)
+        hass.states.async_set(self.STATUS_ENTITY, "unavailable")
+        await hass.async_block_till_done()
+
+        # Step 4: Meter event at t=1020 with the sensor still reporting unavailable.
+        # Because unknown/unavailable maps to ev_charging=True, the idle clamp does
+        # NOT apply and the balancer should allow the current to rise toward the
+        # full available headroom (~26 A).
+        # If either glitch had incorrectly reset the ramp-up cooldown (to t≈1001),
+        # only ~19 s would have elapsed at t=1020 — still within the 30 s window —
+        # and the ramp-up constraint would hold the current at 6 A instead.
+        # Use 317 W (not 318) so this is a distinct state change from Step 1.
+        set_time(1020.0)
+        hass.states.async_set(POWER_METER, "317")
+        await hass.async_block_till_done()
+
+        assert float(hass.states.get(current_set_id).state) > DEFAULT_MIN_EV_CURRENT, (
+            "Sensor glitches to 'unknown'/'unavailable' must not reset the ramp-up "
+            "cooldown; with ev_charging=True (safe fallback) and no active cooldown "
+            "the commanded current must rise above min_ev_current."
+        )

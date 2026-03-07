@@ -5,12 +5,15 @@ Covers:
   boundary values
 - distribute_current: single charger, multi-charger fairness, cap
   redistribution, shutoff, disabled state, power sensor unavailable
+- distribute_current_weighted: proportional allocation, cap/stop redistribution,
+  fallback to equal share when weights are equal or zero
 """
 
 from custom_components.ev_lb.load_balancer import (
     clamp_current,
     compute_available_current,
     distribute_current,
+    distribute_current_weighted,
 )
 
 
@@ -328,3 +331,257 @@ class TestPowerSensorUnavailable:
         )
         result = clamp_current(available, max_charger_a=32.0, min_charger_a=6.0)
         assert result == 32.0
+
+
+# ---------------------------------------------------------------------------
+# distribute_current_weighted — weighted allocation
+# ---------------------------------------------------------------------------
+
+
+class TestDistributeCurrentWeightedBasics:
+    """Verify weighted distribution gives proportional allocations and correctly
+    degrades to equal sharing when all weights are the same."""
+
+    def test_empty_charger_list_returns_empty(self):
+        """When no chargers are configured, the system does not allocate any charging current."""
+        result = distribute_current_weighted(available_a=30.0, chargers=[])
+        assert result == []
+
+    def test_single_charger_receives_full_available(self):
+        """A single charger with any weight receives the full available current (up to its max)."""
+        result = distribute_current_weighted(available_a=20.0, chargers=[(6.0, 32.0, 50)])
+        assert result == [20.0]
+
+    def test_equal_weights_match_fair_distribution(self):
+        """Two chargers with equal weights receive equal shares — same as distribute_current."""
+        result = distribute_current_weighted(
+            available_a=24.0, chargers=[(6.0, 16.0, 50), (6.0, 16.0, 50)]
+        )
+        assert result == [12.0, 12.0]
+
+    def test_zero_available_stops_all_chargers(self):
+        """Zero available current stops all chargers regardless of weights."""
+        result = distribute_current_weighted(
+            available_a=0.0, chargers=[(6.0, 32.0, 60), (6.0, 32.0, 40)]
+        )
+        assert result == [None, None]
+
+    def test_negative_available_stops_all_chargers(self):
+        """Negative available current (overload) stops all chargers."""
+        result = distribute_current_weighted(
+            available_a=-5.0, chargers=[(6.0, 32.0, 50), (6.0, 32.0, 50)]
+        )
+        assert result == [None, None]
+
+
+class TestDistributeCurrentWeightedProportional:
+    """Verify that higher-weight chargers receive proportionally more current."""
+
+    def test_60_40_split_two_chargers(self):
+        """A 60/40 priority split distributes current proportionally between two chargers."""
+        # Available: 20 A; weights 60 and 40
+        # charger A share = 20 * 0.6 = 12 A; charger B share = 20 * 0.4 = 8 A
+        result = distribute_current_weighted(
+            available_a=20.0, chargers=[(6.0, 32.0, 60), (6.0, 32.0, 40)]
+        )
+        assert result[0] == 12.0
+        assert result[1] == 8.0
+
+    def test_higher_priority_charger_gets_more_current(self):
+        """Charger with larger weight receives more current than its lower-weight peer."""
+        result = distribute_current_weighted(
+            available_a=30.0, chargers=[(6.0, 32.0, 75), (6.0, 32.0, 25)]
+        )
+        assert result[0] is not None
+        assert result[1] is not None
+        assert result[0] > result[1]
+
+    def test_total_allocation_does_not_exceed_available(self):
+        """Sum of weighted allocations never exceeds available current."""
+        chargers = [(6.0, 16.0, 60), (6.0, 32.0, 30), (6.0, 10.0, 10)]
+        available = 40.0
+        result = distribute_current_weighted(available_a=available, chargers=chargers)
+        total = sum(a for a in result if a is not None)
+        assert total <= available + 1e-9
+
+    def test_three_chargers_proportional_allocation(self):
+        """Three chargers with weights 50/30/20 receive proportional shares from a large pool."""
+        # Available: 50 A; weights 50/30/20 (sums to 100)
+        # Shares: 25 A, 15 A, 10 A — all within limits
+        result = distribute_current_weighted(
+            available_a=50.0,
+            chargers=[(6.0, 32.0, 50), (6.0, 32.0, 30), (6.0, 32.0, 20)],
+        )
+        assert result[0] == 25.0
+        assert result[1] == 15.0
+        assert result[2] == 10.0
+
+
+class TestDistributeCurrentWeightedCapRedistribution:
+    """Verify that current capped by a charger's max is redistributed to lower-weight peers."""
+
+    def test_high_priority_charger_capped_redistributes_to_low_priority(self):
+        """When the high-priority charger hits its max, surplus goes to the lower-priority charger."""
+        # Available: 28 A; charger A weight=60 max=10 A, charger B weight=40 max=32 A
+        # Round 1: share_A = 16.8 A → capped at 10 A; remaining = 18 A → charger B gets 18 A
+        result = distribute_current_weighted(
+            available_a=28.0, chargers=[(6.0, 10.0, 60), (6.0, 32.0, 40)]
+        )
+        assert result[0] == 10.0
+        assert result[1] == 18.0
+
+    def test_both_chargers_receive_equal_current_when_high_priority_capped(self):
+        """Lower-priority charger receives the surplus once the high-priority charger reaches its maximum."""
+        # A: max=10 A, weight=60 | B: max=32 A, weight=40 | available=20 A
+        # share_A = 12 A → capped at 10 A; remaining = 10 A → B gets 10 A
+        result = distribute_current_weighted(
+            available_a=20.0, chargers=[(6.0, 10.0, 60), (6.0, 32.0, 40)]
+        )
+        assert result[0] == 10.0
+        assert result[1] == 10.0
+
+    def test_lower_priority_charger_stops_when_high_priority_fills_its_cap(self):
+        """Lower-priority charger stops once the high-priority charger reaches its maximum and no current remains."""
+        # A: max=10 A, weight=60 | B: max=32 A, weight=40 | available=10 A
+        # share_A = 6 A (≥ min 6 A, stable), share_B = 4 A (< min 6 A → stopped)
+        # A alone: remaining = 10 A → capped at max 10 A
+        result = distribute_current_weighted(
+            available_a=10.0, chargers=[(6.0, 10.0, 60), (6.0, 32.0, 40)]
+        )
+        assert result[0] == 10.0
+        assert result[1] is None
+
+    def test_low_priority_charger_capped_redistributes_to_high_priority(self):
+        """When the low-priority charger hits its max, surplus goes to the high-priority charger."""
+        # Available: 28 A; charger A weight=60 max=32 A, charger B weight=40 max=8 A
+        # Round 1: share_A = 16.8 A (ok), share_B = 11.2 → capped at 8 A
+        # remaining = 20 A → charger A gets 20 A
+        result = distribute_current_weighted(
+            available_a=28.0, chargers=[(6.0, 32.0, 60), (6.0, 8.0, 40)]
+        )
+        assert result[0] == 20.0
+        assert result[1] == 8.0
+
+    def test_very_large_available_caps_all_chargers_at_max(self):
+        """All chargers receive their rated maximum when available current is very large."""
+        result = distribute_current_weighted(
+            available_a=10000.0,
+            chargers=[(6.0, 32.0, 50), (6.0, 16.0, 50)],
+        )
+        assert result == [32.0, 16.0]
+
+    def test_below_min_in_proportional_split_becomes_viable_after_cap(self):
+        """Charger below min in proportional split charges once cap surplus frees enough headroom.
+
+        The lower-weight charger appears below minimum in the initial proportional
+        allocation (weight 10 → 1.2 A out of 12 A), but after the higher-weight
+        charger is capped at its 6 A maximum the freed headroom (6 A remaining)
+        is exactly enough for the lower charger's minimum.  Both chargers should
+        charge at 6 A rather than the lower one being incorrectly stopped.
+        """
+        # A: weight=90, max=6 A, min=6 A; B: weight=10, max=32 A, min=6 A; available=12 A
+        # Round 1 proportional: A=10.8 (→ capped at 6), B=1.2 (appears below min=6)
+        # After cap settle: remaining=6 A; B recomputed share=6 A ≥ min=6 A → viable
+        result = distribute_current_weighted(
+            available_a=12.0, chargers=[(6.0, 6.0, 90), (6.0, 32.0, 10)]
+        )
+        assert result[0] == 6.0
+        assert result[1] == 6.0
+
+
+class TestDistributeCurrentWeightedStopConditions:
+    """Verify that chargers below their minimum are stopped and their share is redistributed."""
+
+    def test_low_priority_charger_stopped_when_share_below_min(self):
+        """Low-priority charger stops and yields its share when weighted allocation falls below minimum."""
+        # Available: 10 A; weights 90/10; charger A min=6 max=32, charger B min=6 max=32
+        # share_A = 9 A (ok), share_B = 1 A (< 6 A min → stop)
+        # remaining = 10 A → charger A gets 10 A
+        result = distribute_current_weighted(
+            available_a=10.0, chargers=[(6.0, 32.0, 90), (6.0, 32.0, 10)]
+        )
+        assert result[0] == 10.0
+        assert result[1] is None
+
+    def test_both_chargers_stopped_when_share_below_min_for_both(self):
+        """Highest-priority charger takes all headroom when proportional split leaves all below minimum."""
+        # Available: 8 A; 2 equal-weight chargers min=6 A
+        # Proportional share = 4 A each < 6 A → tie-break: A (index 0) first
+        # A: 8 A remaining ≥ 6 A min → keep A; B: 2 A < 6 A → stop B
+        # Round 2: A alone, A gets 8 A
+        result = distribute_current_weighted(
+            available_a=8.0, chargers=[(6.0, 32.0, 50), (6.0, 32.0, 50)]
+        )
+        assert result[0] == 8.0
+        assert result[1] is None
+
+    def test_priority_tiebreak_equal_weights_11a(self):
+        """Highest-priority charger takes all headroom when proportional split leaves all below minimum."""
+        # 11 A, min 6 A, equal weights → proportional = 5.5 A each < 6 A min
+        # Tie-break: A (index 0) keeps 11 A; 5 A left < 6 A min for B → B stopped
+        result = distribute_current_weighted(
+            available_a=11.0, chargers=[(6.0, 32.0, 50), (6.0, 32.0, 50)]
+        )
+        assert result[0] == 11.0
+        assert result[1] is None
+
+    def test_priority_tiebreak_equal_weights_6a(self):
+        """Highest-priority charger charges at minimum when headroom exactly meets one charger's minimum."""
+        # 6 A, min 6 A, equal weights → proportional = 3 A each < 6 A min
+        # Tie-break: A gets 6 A; 0 A < 6 A min for B → B stopped
+        result = distribute_current_weighted(
+            available_a=6.0, chargers=[(6.0, 32.0, 50), (6.0, 32.0, 50)]
+        )
+        assert result[0] == 6.0
+        assert result[1] is None
+
+    def test_priority_tiebreak_weighted_9a(self):
+        """Higher-weight charger receives all headroom when proportional allocation would stop all chargers."""
+        # 9 A, 60/40 weights, min 6 A → A gets 5.4 A, B gets 3.6 A → both below min
+        # Tie-break: A (higher weight) first, 9 A ≥ 6 A → A keeps; 3 A < 6 A min for B
+        result = distribute_current_weighted(
+            available_a=9.0, chargers=[(6.0, 32.0, 60), (6.0, 32.0, 40)]
+        )
+        assert result[0] == 9.0
+        assert result[1] is None
+
+    def test_priority_tiebreak_truly_insufficient_stops_all(self):
+        """All chargers stop when headroom falls below every charger's minimum operating current."""
+        # 5 A available, min 6 A → no charger can charge
+        result = distribute_current_weighted(
+            available_a=5.0, chargers=[(6.0, 32.0, 50), (6.0, 32.0, 50)]
+        )
+        assert result == [None, None]
+
+    def test_asymmetric_minimums_with_weights_priority_charger_charges(self):
+        """Higher-priority charger continues charging while lower-priority stopped due to min constraint."""
+        # Available: 10 A; charger A weight=70 min=6, charger B weight=30 min=8
+        # share_A = 7 A (>= 6 → ok), share_B = 3 A (< 8 → stop)
+        # remaining = 10 A → charger A gets all 10 A
+        result = distribute_current_weighted(
+            available_a=10.0, chargers=[(6.0, 32.0, 70), (8.0, 32.0, 30)]
+        )
+        assert result[0] == 10.0
+        assert result[1] is None
+
+
+class TestDistributeCurrentWeightedZeroWeights:
+    """Verify graceful handling of zero or negative weights (degenerate inputs)."""
+
+    def test_all_zero_weights_falls_back_to_equal_share(self):
+        """When all charger weights are zero, the algorithm distributes current equally."""
+        result = distribute_current_weighted(
+            available_a=24.0, chargers=[(6.0, 32.0, 0), (6.0, 32.0, 0)]
+        )
+        assert result == [12.0, 12.0]
+
+    def test_step_applied_to_weighted_shares(self):
+        """Each charger's weighted allocation is floored to the configured step size."""
+        # Available: 25 A; weights 60/40; shares 15 A / 10 A — both exact with 1 A step
+        result = distribute_current_weighted(
+            available_a=25.0,
+            chargers=[(6.0, 32.0, 60), (6.0, 32.0, 40)],
+            step_a=1.0,
+        )
+        assert result[0] == 15.0
+        assert result[1] == 10.0

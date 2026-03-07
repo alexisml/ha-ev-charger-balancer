@@ -61,7 +61,7 @@ class TestDeviceRegistration:
         entries = er.async_entries_for_config_entry(
             ent_reg, mock_config_entry.entry_id
         )
-        assert len(entries) == 21  # 11 sensors + 4 binary_sensors + 5 numbers + 1 switch
+        assert len(entries) == 22  # 11 sensors + 4 binary_sensors + 6 numbers + 1 switch
 
         dev_reg = dr.async_get(hass)
         device = dev_reg.async_get_device(
@@ -110,6 +110,7 @@ class TestUniqueIds:
             "ramp_up_time",
             "overload_trigger_delay",
             "overload_loop_interval",
+            "charger_1_priority",
             "enabled",
         }
         actual_suffixes = set()
@@ -294,7 +295,12 @@ class TestBinarySensorEntity:
     async def test_ev_charging_binary_sensor_initial_value(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """EV charging binary sensor starts as on (assumes charging until meter update proves otherwise)."""
+        """EV charging binary sensor starts as off before any current has been commanded.
+
+        Without a status sensor, ev_charging reflects whether current_set_a > 0.
+        At startup the charger had not yet received any current command (current_set_a = 0),
+        so the diagnostic correctly reports off until the first meter event assigns current.
+        """
         await setup_integration(hass, mock_config_entry)
 
         ent_reg = er.async_get(hass)
@@ -304,7 +310,7 @@ class TestBinarySensorEntity:
         assert entity_id is not None
         state = hass.states.get(entity_id)
         assert state is not None
-        assert state.state == "on"
+        assert state.state == "off"
 
 
 # ---------------------------------------------------------------------------
@@ -573,7 +579,7 @@ class TestUnload:
         entries_before = er.async_entries_for_config_entry(
             ent_reg, mock_config_entry.entry_id
         )
-        assert len(entries_before) == 21
+        assert len(entries_before) == 22
 
         await hass.config_entries.async_unload(mock_config_entry.entry_id)
         await hass.async_block_till_done()

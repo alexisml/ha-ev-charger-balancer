@@ -61,7 +61,7 @@ The integration watches your home's power meter. When total service power change
 - **Hardware-agnostic** — works with any charger controllable via HA scripts (OCPP, Modbus, REST, etc.)
 - **Full observability** — sensors, events, and persistent notifications for monitoring and automations
 
-**Current limitation:** Supports **one charger** per instance. Multi-charger support is planned for [Phase 2](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md).
+**Multi-charger support:** Up to `MAX_CHARGERS` EV chargers per power meter (default cap: 3), each with a configurable priority weight (0–100). Available current is distributed proportionally to weights; chargers that are capped or paused redistribute their unused headroom. Priority 0 stops that charger. Existing single-charger configurations continue to work without any migration. See [Multi-charger plan](docs/documentation/milestones/02-2026-02-19-multi-charger-plan.md).
 
 ---
 
@@ -69,28 +69,29 @@ The integration watches your home's power meter. When total service power change
 
 | Guide | Description |
 |---|---|
-| [**Installation & Setup**](docs/documentation/installation-and-setup.md) | Install via HACS, configure step-by-step, verify your setup |
-| [**How It Works**](docs/documentation/how-it-works.md) | What to expect, what NOT to expect, entities reference, algorithm details |
-| [**Troubleshooting & Debugging**](docs/documentation/troubleshooting-and-debugging.md) | Common problems, log interpretation, diagnostic sensors, FAQ |
-| [**Development Guide**](docs/documentation/development-guide.md) | Architecture, running tests/CI locally, contributing, roadmap |
+| [**Installation & Setup**](docs/documentation/01-installation-and-setup.md) | Install via HACS, configure step-by-step, verify your setup |
+| [**How It Works**](docs/documentation/02-how-it-works.md) | What to expect, what NOT to expect, entities reference, algorithm details |
+| [**Multi-Charger Load Balancing**](docs/documentation/03-multi-charger-guide.md) | Run 1–N chargers on one circuit with weighted priority, examples, and runtime adjustment |
+| [**Action Scripts Guide**](docs/documentation/04-action-scripts-guide.md) | Charger control scripts — OCPP, REST, Modbus, switch examples |
+| [**Event Notifications Guide**](docs/documentation/05-event-notifications-guide.md) | Event types, payloads, automation examples for mobile alerts |
+| [**Logging Guide**](docs/documentation/06-logging-guide.md) | Debug logs, log levels, diagnostic sensors |
+| [**Troubleshooting & Debugging**](docs/documentation/07-troubleshooting-and-debugging.md) | Common problems, log interpretation, diagnostic sensors, FAQ |
+| [**Development Guide**](docs/documentation/08-development-guide.md) | Architecture, running tests/CI locally, contributing, roadmap |
 
-### Reference guides
+### Quick reference
 
 | Guide | Description |
 |---|---|
-| [Action Scripts Guide](docs/documentation/action-scripts-guide.md) | Charger control scripts — OCPP, REST, Modbus, switch examples |
 | [Starter Script Templates](docs/examples/) | Ready-to-use YAML templates for all charger types |
-| [Event Notifications Guide](docs/documentation/event-notifications-guide.md) | Event types, payloads, automation examples for mobile alerts |
-| [Logging Guide](docs/documentation/logging-guide.md) | Debug logs, log levels, diagnostic sensors |
 
 ---
 
 ## Quick install (HACS)
 
-1. **Install** via [HACS](https://hacs.xyz/) — see [Installation & Setup](docs/documentation/installation-and-setup.md)
+1. **Install** via [HACS](https://hacs.xyz/) — see [Installation & Setup](docs/documentation/01-installation-and-setup.md)
 2. **Configure** in Settings → Devices & Services → Add Integration → "Watt-O-Balancer"
-3. **Create action scripts** to control your charger — see [Action Scripts Guide](docs/documentation/action-scripts-guide.md)
-4. **Monitor** via dashboard sensors and [event notifications](docs/documentation/event-notifications-guide.md)
+3. **Create action scripts** to control your charger — see [Action Scripts Guide](docs/documentation/04-action-scripts-guide.md)
+4. **Monitor** via dashboard sensors and [event notifications](docs/documentation/05-event-notifications-guide.md)
 
 ---
 
@@ -122,7 +123,7 @@ Configuration is exposed through the integration UI. Conceptually, you will:
 
 ## Contributing
 
-See the [Development Guide](docs/documentation/development-guide.md) for architecture, testing, CI checks, and contribution guidelines.
+See the [Development Guide](docs/documentation/08-development-guide.md) for architecture, testing, CI checks, and contribution guidelines.
 
 Development artifacts (research, design decisions, PR retrospectives) are under [`docs/development-memories/`](docs/development-memories/README.md).
 

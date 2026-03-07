@@ -20,6 +20,8 @@ from custom_components.ev_lb.const import (
     CONF_ACTION_SET_CURRENT,
     CONF_ACTION_START_CHARGING,
     CONF_ACTION_STOP_CHARGING,
+    CONF_CHARGER_PRIORITY,
+    CONF_CHARGERS,
     CONF_MAX_SERVICE_CURRENT,
     CONF_POWER_METER_ENTITY,
     CONF_UNAVAILABLE_BEHAVIOR,
@@ -44,6 +46,14 @@ POWER_METER = "sensor.house_power_w"
 SET_CURRENT_SCRIPT = "script.ev_lb_set_current"
 STOP_CHARGING_SCRIPT = "script.ev_lb_stop_charging"
 START_CHARGING_SCRIPT = "script.ev_lb_start_charging"
+
+# Multi-charger script IDs used in two-charger test fixtures
+SET_CURRENT_SCRIPT_1 = "script.ev_lb_set_current_1"
+STOP_CHARGING_SCRIPT_1 = "script.ev_lb_stop_charging_1"
+START_CHARGING_SCRIPT_1 = "script.ev_lb_start_charging_1"
+SET_CURRENT_SCRIPT_2 = "script.ev_lb_set_current_2"
+STOP_CHARGING_SCRIPT_2 = "script.ev_lb_stop_charging_2"
+START_CHARGING_SCRIPT_2 = "script.ev_lb_start_charging_2"
 
 _BASE_CONFIG = {
     CONF_POWER_METER_ENTITY: POWER_METER,
@@ -116,6 +126,98 @@ def mock_config_entry_ignore() -> MockConfigEntry:
         data={
             **_BASE_CONFIG,
             CONF_UNAVAILABLE_BEHAVIOR: UNAVAILABLE_BEHAVIOR_IGNORE,
+        },
+        title="EV Load Balancing",
+    )
+
+
+@pytest.fixture
+def mock_config_entry_two_chargers() -> MockConfigEntry:
+    """Create a mock config entry with two chargers of equal priority (50/50), no action scripts."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **_BASE_CONFIG,
+            CONF_CHARGERS: [
+                {CONF_CHARGER_PRIORITY: 50},
+                {CONF_CHARGER_PRIORITY: 50},
+            ],
+        },
+        title="EV Load Balancing",
+    )
+
+
+@pytest.fixture
+def mock_config_entry_two_chargers_weighted() -> MockConfigEntry:
+    """Create a mock config entry with two chargers at 60/40 priority weighting, no action scripts."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **_BASE_CONFIG,
+            CONF_CHARGERS: [
+                {CONF_CHARGER_PRIORITY: 60},
+                {CONF_CHARGER_PRIORITY: 40},
+            ],
+        },
+        title="EV Load Balancing",
+    )
+
+
+@pytest.fixture
+def mock_config_entry_three_chargers() -> MockConfigEntry:
+    """Create a mock config entry with three equal-priority chargers (no action scripts)."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **_BASE_CONFIG,
+            CONF_CHARGERS: [
+                {CONF_CHARGER_PRIORITY: 50},
+                {CONF_CHARGER_PRIORITY: 50},
+                {CONF_CHARGER_PRIORITY: 50},
+            ],
+        },
+        title="EV Load Balancing",
+    )
+
+
+@pytest.fixture
+def mock_config_entry_three_chargers_weighted() -> MockConfigEntry:
+    """Create a mock config entry with three chargers at 60/30/10 priority weighting, no action scripts."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **_BASE_CONFIG,
+            CONF_CHARGERS: [
+                {CONF_CHARGER_PRIORITY: 60},
+                {CONF_CHARGER_PRIORITY: 30},
+                {CONF_CHARGER_PRIORITY: 10},
+            ],
+        },
+        title="EV Load Balancing",
+    )
+
+
+@pytest.fixture
+def mock_config_entry_two_chargers_with_actions() -> MockConfigEntry:
+    """Create a mock config entry with two equal-priority chargers, each with action scripts."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            **_BASE_CONFIG,
+            CONF_CHARGERS: [
+                {
+                    CONF_CHARGER_PRIORITY: 50,
+                    CONF_ACTION_SET_CURRENT: SET_CURRENT_SCRIPT_1,
+                    CONF_ACTION_STOP_CHARGING: STOP_CHARGING_SCRIPT_1,
+                    CONF_ACTION_START_CHARGING: START_CHARGING_SCRIPT_1,
+                },
+                {
+                    CONF_CHARGER_PRIORITY: 50,
+                    CONF_ACTION_SET_CURRENT: SET_CURRENT_SCRIPT_2,
+                    CONF_ACTION_STOP_CHARGING: STOP_CHARGING_SCRIPT_2,
+                    CONF_ACTION_START_CHARGING: START_CHARGING_SCRIPT_2,
+                },
+            ],
         },
         title="EV Load Balancing",
     )

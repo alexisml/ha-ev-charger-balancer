@@ -61,7 +61,7 @@ flowchart LR
 | Field | What it is | What to enter | Default |
 |---|---|---|---|
 | **Power meter sensor** | The sensor that reports your total service power in Watts. This is the main input the integration uses to compute available headroom. | Select any `sensor.*` entity that reports power in W. This is typically your main electricity meter, a CT clamp sensor, or a smart meter integration. | *(required — no default)* |
-| **Supply voltage** | Your nominal mains voltage. Used to convert between Watts and Amps. The integration assumes a **single-phase** supply. For three-phase installations, see [Single-phase assumption and multi-phase installations](how-it-works.md#single-phase-assumption-and-multi-phase-installations). | Enter `230` for most of Europe, `240` for UK/Australia, or `120` for North America. | `230` V |
+| **Supply voltage** | Your nominal mains voltage. Used to convert between Watts and Amps. The integration assumes a **single-phase** supply. For three-phase installations, see [Single-phase assumption and multi-phase installations](02-how-it-works.md#single-phase-assumption-and-multi-phase-installations). | Enter `230` for most of Europe, `240` for UK/Australia, or `120` for North America. | `230` V |
 | **Max service current** | Your service current limit. The integration will **never** allow total consumption to exceed this. You can set this **lower than your actual breaker rating** to keep a permanent safety margin — for example, enter 28 A on a 32 A service to always reserve 4 A for other loads. It can also represent a subcircuit or any custom power budget. | Check your main breaker or electrical panel. Common values: 25 A, 32 A, 40 A, 63 A. | `32` A |
 | **When power meter is unavailable** | What should happen if your power meter sensor stops reporting (goes `unavailable` or `unknown`). | Choose one of three options — see below. | `Stop charging` |
 
@@ -86,9 +86,9 @@ These are **optional**. If you skip them, the integration runs in compute-only m
 | **Set current action** | A script entity that the integration calls to set the charging current on your charger. Receives `current_a` (float) and `charger_id` (string) as variables. |
 | **Stop charging action** | A script entity called to stop charging when there's not enough headroom. Receives `charger_id` (string). |
 | **Start charging action** | A script entity called to resume charging after it was stopped. Receives `charger_id` (string). |
-| **Charger status sensor** | A sensor entity whose state equals `Charging` when the EV is actively drawing current. When configured, the balancer avoids over-subtracting headroom while the charger is idle or finished. If you use the [lbbrhzn/ocpp](https://github.com/lbbrhzn/ocpp) integration, use `sensor.*_status_connector`. See [Charger status sensor](how-it-works.md#charger-status-sensor-optional) for details. |
+| **Charger status sensor** | A sensor entity whose state equals `Charging` when the EV is actively drawing current. When configured, the balancer avoids over-subtracting headroom while the charger is idle or finished. If you use the [lbbrhzn/ocpp](https://github.com/lbbrhzn/ocpp) integration, use `sensor.*_status_connector`. See [Charger status sensor](02-how-it-works.md#charger-status-sensor-optional) for details. |
 
-> **New to action scripts?** See the [Action Scripts Guide](action-scripts-guide.md) for step-by-step instructions on creating scripts for OCPP, REST, Modbus, or switch-based chargers.
+> **New to action scripts?** See the [Action Scripts Guide](04-action-scripts-guide.md) for step-by-step instructions on creating scripts for OCPP, REST, Modbus, or switch-based chargers.
 
 4. Click **Submit**. The integration creates a device called **EV Charger Load Balancer** and all its entities immediately.
 
@@ -108,11 +108,23 @@ Almost all settings can be changed at any time via the **Configure** dialog — 
 | Max service current | ✅ Yes |
 | When power meter is unavailable | ✅ Yes |
 | Fallback current | ✅ Yes |
-| Set current action script | ✅ Yes |
-| Stop charging action script | ✅ Yes |
-| Start charging action script | ✅ Yes |
-| Charger status sensor | ✅ Yes |
+| **Charger action scripts** | ✅ Yes — per charger |
+| **Charger status sensor** | ✅ Yes — per charger |
+| **Charger priority weight** | ✅ Yes — per charger |
+| **Number of chargers** | ✅ Yes — add or remove chargers |
 | **Power meter sensor** | ❌ **No** — see below |
+
+#### Managing chargers (add, modify, remove)
+
+The **Configure** dialog walks through a *global settings* step followed by one step per charger. Each charger step is pre-filled with the current values, so you only need to update the fields that require changes:
+
+| What you want to do | How |
+|---|---|
+| **Modify** a charger's settings | Open Configure → step through to that charger's step → change the fields → save |
+| **Remove** the last charger | Open Configure → step through to the charger you want to be the last one → leave "Add another charger?" un-ticked → save |
+| **Add** a new charger | Open Configure → step through all existing chargers → tick "Add another charger?" on the last one → configure the new charger → save |
+
+> **Note:** The "Add another charger?" toggle only appears when the current number of configured chargers is below the `MAX_CHARGERS` limit (default: 3). To raise the limit, change `MAX_CHARGERS` in `const.py`.
 
 #### Changing the power meter sensor
 
@@ -153,6 +165,7 @@ After configuration, check that everything is working:
 
 ## Next steps
 
-- Learn [how the integration works](how-it-works.md) — what to expect, what it does and doesn't do
-- Set up [action scripts](action-scripts-guide.md) to control your physical charger
-- Configure [event notifications](event-notifications-guide.md) for mobile alerts
+- Learn [how the integration works](02-how-it-works.md) — what to expect, what it does and doesn't do
+- Read the [Multi-Charger Guide](03-multi-charger-guide.md) if you have more than one EV charger
+- Set up [action scripts](04-action-scripts-guide.md) to control your physical charger
+- Configure [event notifications](05-event-notifications-guide.md) for mobile alerts

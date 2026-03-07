@@ -36,28 +36,45 @@
     "step": {
       "init": {
         "title": "Configuración del Balanceador de Carga para VE",
-        "description": "Actualiza la configuración de la integración. El sensor de consumo eléctrico no puede cambiarse una vez configurada la integración.",
+        "description": "Actualiza los ajustes globales. El sensor de consumo eléctrico no puede cambiarse una vez configurada la integración. Al guardar, configurarás los scripts de acción, el sensor de estado y la prioridad de cada cargador.",
         "data": {
           "voltage": "Voltaje de suministro",
           "max_service_current": "Corriente máxima del servicio (capacidad del interruptor)",
           "unavailable_behavior": "Cuando el medidor no está disponible",
-          "unavailable_fallback_current": "Corriente de respaldo (para modo 'Establecer una corriente específica')",
-          "action_set_current": "Acción para establecer corriente (script)",
-          "action_stop_charging": "Acción para detener carga (script)",
-          "action_start_charging": "Acción para iniciar carga (script)",
-          "charger_status_entity": "Sensor de estado del cargador (opcional)"
+          "unavailable_fallback_current": "Corriente de respaldo heredada"
         },
         "data_description": {
           "voltage": "Voltaje nominal de suministro en Volts (usado para convertir W ↔ A).",
           "max_service_current": "Capacidad del interruptor principal en Amperes. La carga nunca excederá este límite. Puedes configurar un valor menor que la capacidad real del interruptor para reservar un margen de seguridad — por ejemplo, ingresa 28 A en un servicio de 32 A para dejar 4 A libres para otros consumos.",
-          "unavailable_behavior": "Qué hacer cuando el medidor de consumo no está disponible: detener la carga (más seguro), ignorar y mantener el último valor, o establecer una corriente específica (limitada a la corriente máxima del cargador).",
-          "unavailable_fallback_current": "Corriente de carga (A) a usar cuando el medidor no está disponible y el modo es 'Establecer una corriente específica'. Este valor se limitará a la corriente máxima del cargador.",
-          "action_set_current": "Entidad de script para establecer la corriente de carga. Recibe variables 'current_a' (flotante, amperios), 'current_w' (flotante, vatios) y 'charger_id' (texto).",
-          "action_stop_charging": "Entidad de script para detener la carga. Recibe una variable 'charger_id' (texto).",
-          "action_start_charging": "Entidad de script para iniciar/reanudar la carga. Recibe una variable 'charger_id' (texto).",
-          "charger_status_entity": "Sensor cuyo estado es 'Charging' cuando el VE está cargando activamente (p. ej. de la integración OCPP). Cuando se configura, el balanceador lo usa para evitar restar demasiado margen cuando el cargador está inactivo o terminado."
+          "unavailable_behavior": "Qué hacer cuando el medidor de consumo no está disponible: detener todos los cargadores (más seguro) o usar la corriente de respaldo individual de cada cargador.",
+          "unavailable_fallback_current": "Heredado: corriente de carga (A) usada cuando el comportamiento es 'Establecer una corriente específica' (opción anterior que ya no aparece en el menú). Esta opción ha sido reemplazada por la corriente de respaldo individual configurada en cada cargador. Se mantiene aquí para que las entradas existentes puedan seguir ajustándose."
+        }
+      },
+      "charger": {
+        "title": "Configurar Cargador",
+        "description": "Configura los scripts de acción, el sensor de estado y la prioridad del cargador {charger_num}. La prioridad controla cómo se distribuye la corriente disponible cuando varios cargadores compiten por el margen.",
+        "data": {
+          "action_set_current": "Acción para establecer corriente (script)",
+          "action_stop_charging": "Acción para detener carga (script)",
+          "action_start_charging": "Acción para iniciar carga (script)",
+          "charger_status_entity": "Sensor de estado del cargador (opcional)",
+          "priority": "Prioridad (mayor = más corriente)",
+          "charger_fallback_current": "Corriente de respaldo",
+          "add_another_charger": "¿Agregar otro cargador?"
+        },
+        "data_description": {
+          "action_set_current": "Script que se ejecuta para establecer la corriente de carga. Recibe las variables: current_a (amperios), current_w (vatios), charger_id (ID de entrada de configuración) y charger_num (índice del cargador, base 1).",
+          "action_stop_charging": "Script que se ejecuta cuando el balanceador decide que este cargador debe dejar de cargar. Recibe las variables: charger_id (ID de entrada de configuración) y charger_num (índice del cargador, base 1).",
+          "action_start_charging": "Script que se ejecuta cuando el balanceador decide que este cargador debe iniciar o reanudar la carga. Recibe las variables: charger_id (ID de entrada de configuración) y charger_num (índice del cargador, base 1).",
+          "charger_status_entity": "Sensor cuyo estado es exactamente 'Charging' cuando este cargador está cargando activamente. Se usa para evitar restar demasiado margen mientras el cargador está inactivo o ha terminado.",
+          "priority": "Peso de prioridad para este cargador (0–100, paso 5). Los valores más altos reciben proporcionalmente más corriente disponible.",
+          "charger_fallback_current": "Corriente de carga (A) aplicada a este cargador cuando el medidor no está disponible y el modo de respaldo es 'Usar corriente de respaldo por cargador'. Limitada a la corriente máxima del cargador.",
+          "add_another_charger": "Activa para configurar otro cargador con su propia prioridad."
         }
       }
+    },
+    "error": {
+      "duplicate_charger_status": "Este sensor de estado ya está siendo utilizado por otro cargador (en esta u otra instancia del balanceador). Por favor, selecciona un sensor diferente."
     }
   },
   "entity": {
@@ -125,6 +142,9 @@
       },
       "overload_loop_interval": {
         "name": "Intervalo de corrección de sobrecarga"
+      },
+      "charger_priority": {
+        "name": "Prioridad del cargador {charger_num}"
       }
     },
     "switch": {

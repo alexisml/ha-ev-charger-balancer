@@ -34,13 +34,18 @@ from .const import (
     CONF_ACTION_SET_CURRENT,
     CONF_ACTION_START_CHARGING,
     CONF_ACTION_STOP_CHARGING,
+    CONF_CHARGER_FALLBACK_CURRENT,
+    CONF_CHARGER_PRIORITY,
     CONF_CHARGER_STATUS_ENTITY,
+    CONF_CHARGERS,
     CONF_MAX_SERVICE_CURRENT,
     CONF_POWER_METER_ENTITY,
     CONF_UNAVAILABLE_BEHAVIOR,
     CONF_UNAVAILABLE_FALLBACK_CURRENT,
     CONF_VOLTAGE,
     CHARGING_STATE_VALUE,
+    DEFAULT_CHARGER_FALLBACK_CURRENT,
+    DEFAULT_CHARGER_PRIORITY,
     DEFAULT_MAX_CHARGER_CURRENT,
     DEFAULT_MIN_EV_CURRENT,
     DEFAULT_OVERLOAD_LOOP_INTERVAL,
@@ -65,19 +70,73 @@ from .const import (
     SIGNAL_UPDATE_FMT,
     STATE_DISABLED,
     STATE_STOPPED,
+    UNAVAILABLE_BEHAVIOR_IGNORE,
+    UNAVAILABLE_BEHAVIOR_PER_CHARGER,
+    UNAVAILABLE_BEHAVIOR_SET_CURRENT,
 )
 from .load_balancer import (
     apply_ramp_up_limit,
     clamp_current,
     clamp_to_safe_output,
-    compute_fallback_reapply,
-    compute_target_current,
+    distribute_current_weighted,
     resolve_balancer_state,
     resolve_fallback_current,
 )
 from ._log import get_logger
 
 _LOGGER = get_logger(__name__)
+
+
+class _ChargerState:
+    """Runtime configuration and mutable state for a single EV charger.
+
+    Encapsulates per-charger action scripts, status sensor, priority weight,
+    and runtime tracking fields (last commanded current, charging state flags,
+    and last reduction timestamp used for ramp-up limiting).
+    """
+
+    __slots__ = (
+        "action_set_current",
+        "action_stop_charging",
+        "action_start_charging",
+        "status_entity",
+        "priority",
+        "fallback_current",
+        "current_set_a",
+        "active",
+        "ev_charging",
+        "last_reduction_time",
+    )
+
+    def __init__(
+        self,
+        action_set_current: str | None,
+        action_stop_charging: str | None,
+        action_start_charging: str | None,
+        status_entity: str | None,
+        priority: float,
+        fallback_current: float = 0.0,
+    ) -> None:
+        """Initialise with configuration; runtime fields start at safe defaults."""
+        self.action_set_current = action_set_current
+        self.action_stop_charging = action_stop_charging
+        self.action_start_charging = action_start_charging
+        self.status_entity = status_entity
+        self.priority = priority
+        self.fallback_current = fallback_current
+        # Mutable runtime state
+        self.current_set_a: float = 0.0
+        self.active: bool = False
+        self.ev_charging: bool = True
+        self.last_reduction_time: float | None = None
+
+    def has_actions(self) -> bool:
+        """Return True if at least one action script is configured for this charger."""
+        return bool(
+            self.action_set_current
+            or self.action_stop_charging
+            or self.action_start_charging
+        )
 
 
 class EvLoadBalancerCoordinator:
@@ -108,7 +167,10 @@ class EvLoadBalancerCoordinator:
             DEFAULT_UNAVAILABLE_FALLBACK_CURRENT,
         )
 
-        self._init_action_scripts(entry)
+        # List of charger states — supports 1 to MAX_CHARGERS chargers.
+        # Backward compat: when CONF_CHARGERS is absent, a single charger
+        # is built from the legacy flat keys.
+        self._chargers: list[_ChargerState] = self._load_chargers()
 
         # Runtime parameters (updated by number/switch entities)
         self.max_charger_current: float = DEFAULT_MAX_CHARGER_CURRENT
@@ -136,14 +198,12 @@ class EvLoadBalancerCoordinator:
         self.action_latency_ms: float | None = None
         self.retry_count: int | None = None
 
-        # Ramp-up cooldown tracking
-        self._last_reduction_time: float | None = None
         self._time_fn = time.monotonic
 
         # Async sleep function — injectable for testing
         self._sleep_fn = asyncio.sleep
 
-        # Current action-execution task — cancelled when a new cycle starts
+        # Current action-execution task (single-charger path; kept for backward compat)
         self._action_task: asyncio.Task[None] | None = None
 
         # Overload correction loop tracking
@@ -157,35 +217,65 @@ class EvLoadBalancerCoordinator:
 
         # Listener removal callbacks
         self._unsub_listener: Callable[[], None] | None = None
-        self._unsub_charger_status: Callable[[], None] | None = None
+        self._unsub_charger_status_list: list[Callable[[], None]] = []
 
     @property
     def current_set_w(self) -> float:
         """Return the last requested charging power in Watts."""
         return round(self.current_set_a * self._voltage, 1)
 
-    def _init_action_scripts(self, entry: ConfigEntry) -> None:
-        """Load action script entity IDs and charger status sensor from the config entry.
+    @property
+    def _charger_status_entity(self) -> str | None:
+        """Return the status entity of the first charger (backward compatibility)."""
+        return self._chargers[0].status_entity if self._chargers else None
 
-        Prefers options over data so changes via options flow take
-        effect without deleting and re-creating the config entry.
+    def _is_ev_charging(self) -> bool:
+        """Return True if any charger's status sensor indicates active charging.
+
+        Backward-compatible wrapper around :meth:`_refresh_ev_charging`.
+        Returns the aggregate ev_charging flag: True when at least one charger
+        is considered to be actively drawing current.
         """
-        self._action_set_current: str | None = entry.options.get(
-            CONF_ACTION_SET_CURRENT,
-            entry.data.get(CONF_ACTION_SET_CURRENT),
-        )
-        self._action_stop_charging: str | None = entry.options.get(
-            CONF_ACTION_STOP_CHARGING,
-            entry.data.get(CONF_ACTION_STOP_CHARGING),
-        )
-        self._action_start_charging: str | None = entry.options.get(
-            CONF_ACTION_START_CHARGING,
-            entry.data.get(CONF_ACTION_START_CHARGING),
-        )
-        self._charger_status_entity: str | None = entry.options.get(
-            CONF_CHARGER_STATUS_ENTITY,
-            entry.data.get(CONF_CHARGER_STATUS_ENTITY),
-        )
+        return any(self._is_charger_charging(c) for c in self._chargers)
+
+    def _load_chargers(self) -> list[_ChargerState]:
+        """Build the list of charger states from the config entry.
+
+        Supports two config formats:
+
+        - **New format** (``CONF_CHARGERS`` list): each element is a dict with
+          per-charger action scripts, status sensor, and priority weight.
+        - **Legacy format** (flat keys): a single charger is constructed from the
+          top-level ``CONF_ACTION_*`` and ``CONF_CHARGER_STATUS_ENTITY`` keys so
+          that existing config entries keep working without migration.
+        """
+        cfg = {**self.entry.data, **self.entry.options}
+
+        if CONF_CHARGERS in cfg and cfg[CONF_CHARGERS]:
+            return [
+                _ChargerState(
+                    action_set_current=c.get(CONF_ACTION_SET_CURRENT),
+                    action_stop_charging=c.get(CONF_ACTION_STOP_CHARGING),
+                    action_start_charging=c.get(CONF_ACTION_START_CHARGING),
+                    status_entity=c.get(CONF_CHARGER_STATUS_ENTITY),
+                    priority=float(c.get(CONF_CHARGER_PRIORITY, DEFAULT_CHARGER_PRIORITY)),
+                    fallback_current=float(
+                        c.get(CONF_CHARGER_FALLBACK_CURRENT, DEFAULT_CHARGER_FALLBACK_CURRENT)
+                    ),
+                )
+                for c in cfg[CONF_CHARGERS]
+            ]
+
+        # Backward compat: build a single charger from legacy flat keys
+        return [
+            _ChargerState(
+                action_set_current=cfg.get(CONF_ACTION_SET_CURRENT),
+                action_stop_charging=cfg.get(CONF_ACTION_STOP_CHARGING),
+                action_start_charging=cfg.get(CONF_ACTION_START_CHARGING),
+                status_entity=cfg.get(CONF_CHARGER_STATUS_ENTITY),
+                priority=DEFAULT_CHARGER_PRIORITY,
+            )
+        ]
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -199,19 +289,29 @@ class EvLoadBalancerCoordinator:
             [self._power_meter_entity],
             self._handle_power_change,
         )
-        if self._charger_status_entity is not None:
-            self._unsub_charger_status = async_track_state_change_event(
-                self.hass,
-                [self._charger_status_entity],
-                self._handle_charger_status_change,
-            )
+        for idx, charger in enumerate(self._chargers):
+            if charger.status_entity is not None:
+                def _make_handler(charger_idx: int) -> Callable[[Event], None]:
+                    @callback
+                    def _handler(event: Event) -> None:
+                        self._handle_charger_status_change(charger_idx, event)
+                    return _handler
+
+                unsub = async_track_state_change_event(
+                    self.hass,
+                    [charger.status_entity],
+                    _make_handler(idx),
+                )
+                self._unsub_charger_status_list.append(unsub)
+
         _LOGGER.debug(
             "Coordinator started — listening to %s "
-            "(voltage=%.0f V, service_limit=%.0f A, unavailable=%s)",
+            "(voltage=%.0f V, service_limit=%.0f A, unavailable=%s, chargers=%d)",
             self._power_meter_entity,
             self._voltage,
             self._max_service_current,
             self._unavailable_behavior,
+            len(self._chargers),
         )
 
         if self.hass.is_running:
@@ -220,7 +320,7 @@ class EvLoadBalancerCoordinator:
             # charger status state immediately so the diagnostic is accurate
             # from the first moment without waiting for the next meter or
             # status-change event.
-            self.ev_charging = self._is_ev_charging()
+            self._refresh_ev_charging()
 
             # The state-change listener above will pick up the next meter
             # event; if the meter is unavailable right now we apply the
@@ -254,9 +354,9 @@ class EvLoadBalancerCoordinator:
         if self._unsub_listener is not None:
             self._unsub_listener()
             self._unsub_listener = None
-        if self._unsub_charger_status is not None:
-            self._unsub_charger_status()
-            self._unsub_charger_status = None
+        for unsub in self._unsub_charger_status_list:
+            unsub()
+        self._unsub_charger_status_list.clear()
         self._cancel_overload_timers()
         if self._action_task and not self._action_task.done():
             self._action_task.cancel()
@@ -286,7 +386,7 @@ class EvLoadBalancerCoordinator:
         # all integrations have loaded.  The healthy-meter path overwrites this
         # inside _recompute(); setting it here ensures the correct value is
         # dispatched even in the unavailable-meter fallback path.
-        self.ev_charging = self._is_ev_charging()
+        self._refresh_ev_charging()
 
         meter_state = self.hass.states.get(self._power_meter_entity)
         if meter_state is None or meter_state.state in ("unavailable", "unknown"):
@@ -355,15 +455,50 @@ class EvLoadBalancerCoordinator:
         self._update_overload_timers()
 
     @callback
-    def _handle_charger_status_change(self, event: Event) -> None:
+    def _handle_charger_status_change(self, charger_idx: int, event: Event) -> None:
         """React to a charger status sensor state change.
 
-        Updates the ``ev_charging`` diagnostic immediately so the binary sensor
+        Updates the charger's ``ev_charging`` flag and the aggregate
+        ``self.ev_charging`` diagnostic immediately so the binary sensor
         reflects the current charger state even between power-meter events.  No
         recompute is performed here — the current calculation is based on the
         power-meter reading and will be updated on the next meter event.
+
+        When the EV transitions from not-charging to charging while the charger
+        is already commanding a non-zero current (i.e., idle at ``min_ev_current``),
+        the per-charger ramp-up cooldown is reset so that the first power-meter
+        recompute after the EV starts drawing current will hold the current at
+        the idle level rather than jumping immediately to the full available
+        headroom.  When the charger is stopped (0 A), no ramp-up trigger is set
+        — the normal cooldown logic from the previous reduction handles the
+        gradual increase.
+
+        The ramp-up cooldown is only reset when the status sensor transitions
+        explicitly to the ``CHARGING_STATE_VALUE`` state.  Transitions to
+        ``unknown``/``unavailable`` are excluded: those use the safe fallback
+        (assume charging) for the ``ev_charging`` flag, but should not be treated
+        as an EV-start event that warrants a ramp-up cooldown reset.
         """
-        new_ev_charging = self._is_ev_charging()
+        charger = self._chargers[charger_idx]
+        was_ev_charging = charger.ev_charging  # capture before update
+        new_state = event.data.get("new_state")
+        new_state_str = new_state.state if new_state is not None else None
+        charger.ev_charging = self._is_charger_charging(charger)
+        if (
+            not was_ev_charging
+            and new_state_str == CHARGING_STATE_VALUE
+            and charger.current_set_a > 0
+        ):
+            # EV just started charging (explicit Charging state, not a glitch to
+            # unknown/unavailable) while the charger was at idle current.
+            # Trigger ramp-up on the next recompute so the current rises
+            # gradually from min_ev_current rather than jumping immediately.
+            charger.last_reduction_time = self._time_fn()
+            _LOGGER.debug(
+                "EV started charging on charger %d — ramp-up cooldown reset to hold at min_ev_current",
+                charger_idx,
+            )
+        new_ev_charging = any(c.ev_charging for c in self._chargers)
         if new_ev_charging != self.ev_charging:
             self.ev_charging = new_ev_charging
             _LOGGER.debug(
@@ -374,6 +509,23 @@ class EvLoadBalancerCoordinator:
 
     # ------------------------------------------------------------------
     # On-demand recompute (triggered by number/switch changes)
+    @callback
+    def async_set_charger_priority(self, charger_index: int, priority: float) -> None:
+        """Update the priority weight for a single charger and recompute.
+
+        Called by the per-charger priority number entities when the user
+        changes a charger's priority on the fly.  The new weight is applied
+        to the in-memory ``_ChargerState`` and the balancing algorithm is
+        re-run immediately against the last known power-meter reading.
+
+        Args:
+            charger_index:  0-based index of the charger in ``self._chargers``.
+            priority:       New priority weight (0–100).
+        """
+        if 0 <= charger_index < len(self._chargers):
+            self._chargers[charger_index].priority = priority
+            self.async_recompute_from_current_state()
+
     # ------------------------------------------------------------------
 
     @callback
@@ -428,25 +580,16 @@ class EvLoadBalancerCoordinator:
 
     @callback
     def manual_set_limit(self, current_a: float) -> None:
-        """Manually set the charger current, bypassing the balancing algorithm.
+        """Manually set the total charger current for this entry, bypassing the balancing algorithm.
 
-        The requested current is clamped to the charger's min/max limits.
-        If the clamped value falls below the minimum EV current, charging
-        is stopped (target set to 0 A).  The override is one-shot: the
-        next power-meter event will resume normal automatic balancing.
+        *current_a* is treated as an aggregate limit for the entire config entry.
+        It is split equally across all configured chargers by ``_update_and_notify``,
+        subject to per-charger maximums and the service limit.  If the resulting
+        per-charger share is below the minimum EV current, charging is stopped.
+        The override is one-shot: the next power-meter event resumes automatic balancing.
         """
-        clamped = clamp_current(
-            current_a,
-            self.max_charger_current,
-            self.min_ev_current,
-        )
-        target = 0.0 if clamped is None else clamped
-        _LOGGER.debug(
-            "Manual override: requested=%.1f A, clamped=%.1f A",
-            current_a,
-            target,
-        )
-        self._update_and_notify(self.available_current_a, target, REASON_MANUAL_OVERRIDE)
+        _LOGGER.debug("Manual override: requested=%.1f A (aggregate)", current_a)
+        self._update_and_notify(self.available_current_a, max(current_a, 0.0), REASON_MANUAL_OVERRIDE)
 
     # ------------------------------------------------------------------
     # Fallback for unavailable power meter
@@ -461,30 +604,67 @@ class EvLoadBalancerCoordinator:
         events or persistent notifications — those were already issued when the
         meter first became unavailable.
 
-        Covers all three fallback modes:
+        Covers all four fallback modes:
 
         - **stop**: applies 0 A (idempotent; action scripts only fire when
           transitioning from active to stopped).
         - **set_current**: recomputes ``min(fallback, new_max_charger)`` and
           updates the charger if the capped value differs.
-        - **ignore**: re-clamps ``current_set_a`` to the new charger limits
-          and updates if the value has changed.
+        - **ignore**: re-clamps each charger's held current to the new limits
+          and updates if any value has changed.
+        - **per_charger**: re-caps each charger's fallback at the updated
+          ``max_charger_current`` and reapplies the per-charger amounts.
         """
-        target = compute_fallback_reapply(
-            self._unavailable_behavior,
-            self._unavailable_fallback_a,
-            self.max_charger_current,
-            self.current_set_a,
-            self.min_ev_current,
-        )
+        if self._unavailable_behavior == UNAVAILABLE_BEHAVIOR_PER_CHARGER:
+            self._apply_per_charger_fallback(reason=REASON_PARAMETER_CHANGE)
+            return
 
+        if self._unavailable_behavior == UNAVAILABLE_BEHAVIOR_IGNORE:
+            # Re-clamp each charger's individually held current to the updated limits,
+            # preserving per-charger differences (ramp or priority) from the last recompute.
+            per_charger_finals: list[float] = []
+            for ch in self._chargers:
+                clamped = clamp_current(ch.current_set_a, self.max_charger_current, self.min_ev_current)
+                per_charger_finals.append(0.0 if clamped is None else clamped)
+            target = sum(per_charger_finals)
+            if target != self.current_set_a:
+                _LOGGER.debug(
+                    "Fallback current updated after parameter change: %.1f A → %.1f A",
+                    self.current_set_a,
+                    target,
+                )
+                self._update_and_notify(
+                    self.available_current_a,
+                    target,
+                    REASON_PARAMETER_CHANGE,
+                    per_charger_finals=per_charger_finals,
+                )
+            else:
+                async_dispatcher_send(self.hass, self.signal_update)
+            return
+
+        if self._unavailable_behavior == UNAVAILABLE_BEHAVIOR_SET_CURRENT:
+            per_charger = min(self._unavailable_fallback_a, self.max_charger_current)
+            if 0 < per_charger < self.min_ev_current:
+                per_charger = 0.0
+            per_charger_finals = [per_charger for _ in self._chargers]
+        else:
+            # UNAVAILABLE_BEHAVIOR_STOP or any unrecognised value
+            per_charger_finals = [0.0 for _ in self._chargers]
+
+        target = sum(per_charger_finals)
         if target != self.current_set_a:
             _LOGGER.debug(
                 "Fallback current updated after parameter change: %.1f A → %.1f A",
                 self.current_set_a,
                 target,
             )
-            self._update_and_notify(self.available_current_a, target, REASON_PARAMETER_CHANGE)
+            self._update_and_notify(
+                self.available_current_a,
+                target,
+                REASON_PARAMETER_CHANGE,
+                per_charger_finals=per_charger_finals,
+            )
         else:
             async_dispatcher_send(self.hass, self.signal_update)
 
@@ -498,12 +678,52 @@ class EvLoadBalancerCoordinator:
         Callers are responsible for setting ``meter_healthy = False`` and
         ``fallback_active = True`` before invoking this method.
         """
+        if self._unavailable_behavior == UNAVAILABLE_BEHAVIOR_PER_CHARGER:
+            self._apply_per_charger_fallback()
+            return
         fallback = self._resolve_fallback()
         if fallback is None:
             # Ignore mode — keep last value, just update sensor state
             async_dispatcher_send(self.hass, self.signal_update)
             return
-        self._update_and_notify(0.0, fallback, REASON_FALLBACK_UNAVAILABLE)
+        self._update_and_notify(0.0, fallback * max(1, len(self._chargers)), REASON_FALLBACK_UNAVAILABLE)
+
+    def _apply_per_charger_fallback(
+        self, reason: str = REASON_FALLBACK_UNAVAILABLE
+    ) -> None:
+        """Apply each charger's individual fallback current when the meter is unavailable.
+
+        Each charger's ``fallback_current`` is capped at ``max_charger_current``
+        so the result stays within the configured charger limit.
+
+        Args:
+            reason: The reason code forwarded to ``_update_and_notify``.  Pass
+                ``REASON_PARAMETER_CHANGE`` when called during an ongoing meter
+                outage to avoid re-firing fault events and persistent
+                notifications that were already issued when the meter first
+                became unavailable.
+        """
+        per_charger_finals = [
+            min(charger.fallback_current, self.max_charger_current)
+            for charger in self._chargers
+        ]
+        total = sum(per_charger_finals)
+        if reason == REASON_FALLBACK_UNAVAILABLE:
+            _LOGGER.warning(
+                "Power meter %s is unavailable — applying per-charger fallback currents %s A",
+                self._power_meter_entity,
+                per_charger_finals,
+            )
+        else:
+            _LOGGER.debug(
+                "Parameter changed during meter outage — reapplying per-charger fallback "
+                "currents %s A (capped at max_charger_current=%.1f A)",
+                per_charger_finals,
+                self.max_charger_current,
+            )
+        self._update_and_notify(
+            0.0, total, reason, per_charger_finals=per_charger_finals
+        )
 
     def _resolve_fallback(self) -> float | None:
         """Determine the fallback current for an unavailable power meter.
@@ -543,21 +763,32 @@ class EvLoadBalancerCoordinator:
     # Core computation
     # ------------------------------------------------------------------
 
-    def _is_ev_charging(self) -> bool:
-        """Return True if the charger status sensor indicates the EV is actively charging.
+    def _is_charger_charging(self, charger: _ChargerState) -> bool:
+        """Return True if *charger*'s status sensor indicates the EV is actively charging.
 
-        When no status sensor is configured, the coordinator assumes the EV is
-        drawing current equal to the last commanded value.  When a sensor is
-        configured, the EV draw estimate is zeroed out if the sensor's state is
-        not 'Charging' — this prevents the balancer from over-subtracting headroom
-        when the charger is idle, paused, or finished.
+        When no status sensor is configured for the charger, the coordinator
+        assumes the EV is drawing current equal to the last commanded value.
+        When a sensor is configured, the EV draw estimate is zeroed out if the
+        sensor's state is not 'Charging' — this prevents the balancer from
+        over-subtracting headroom when the charger is idle, paused, or finished.
         """
-        if self._charger_status_entity is None:
-            return True  # No sensor configured; assume charging when current > 0
-        state = self.hass.states.get(self._charger_status_entity)
+        if charger.status_entity is None:
+            return charger.current_set_a > 0  # No sensor configured; assume charging when current > 0
+        state = self.hass.states.get(charger.status_entity)
         if state is None or state.state in ("unavailable", "unknown"):
             return True  # Sensor unavailable; safe fallback — assume charging
         return state.state == CHARGING_STATE_VALUE
+
+    def _refresh_ev_charging(self) -> None:
+        """Update each charger's ev_charging flag and the aggregate diagnostic.
+
+        Reads the current state of each configured charger status sensor and
+        updates both the per-charger ``ev_charging`` field and the coordinator's
+        aggregate ``self.ev_charging`` (True when any charger is actively charging).
+        """
+        for charger in self._chargers:
+            charger.ev_charging = self._is_charger_charging(charger)
+        self.ev_charging = any(c.ev_charging for c in self._chargers)
 
     # ------------------------------------------------------------------
     # Overload correction loop
@@ -645,84 +876,102 @@ class EvLoadBalancerCoordinator:
         self._recompute(service_power_w)
 
     def _recompute(self, service_power_w: float, reason: str = REASON_POWER_METER_UPDATE) -> None:
-        """Run the balancing algorithm for this instance and publish updates."""
+        """Run the balancing algorithm for this instance and publish updates.
+
+        Computes available current, distributes it across all configured
+        chargers (weighted by priority), applies per-charger ramp-up limits,
+        and triggers entity notifications and action execution.
+        """
         if self.max_charger_current == 0.0:
             _LOGGER.debug("Max charger current is 0 A — skipping load balancing, outputting 0 A")
             self._update_and_notify(0.0, 0.0, reason)
             return
 
         service_current_a = service_power_w / self._voltage
-        # When we know the EV is not actively charging, do not subtract its
-        # last commanded current from the available headroom estimate.
-        self.ev_charging = self._is_ev_charging()
-        ev_current_estimate = self.current_set_a if self.ev_charging else 0.0
-        # When the total service draw is less than the commanded EV current the EV
-        # must be drawing less than we asked (e.g. battery throttling near 100 %).
-        # Subtracting a larger commanded value than the actual draw would produce a
-        # negative non-EV load that gets clamped to zero, making available_a jump to
-        # the service maximum and causing the coordinator to keep commanding max amps
-        # indefinitely.  Use 0 as the EV estimate in this case so that all measured
-        # load is treated as non-EV — a conservative, safe lower bound on headroom.
-        if service_current_a < ev_current_estimate:
-            ev_current_estimate = 0.0
-        available_a, clamped = compute_target_current(
-            service_current_a,
-            ev_current_estimate,
-            self._max_service_current,
-            self.max_charger_current,
-            self.min_ev_current,
-        )
-        target_a = 0.0 if clamped is None else clamped
 
-        # Apply ramp-up limit (instant down, delayed up)
+        # Refresh per-charger ev_charging flags and the aggregate diagnostic.
+        self._refresh_ev_charging()
+
+        # Estimate the total EV draw currently accounted for in the meter.
+        # When a charger's status sensor says it is NOT charging, we do not
+        # subtract its last commanded current from the service reading.
+        total_ev_estimate = sum(
+            c.current_set_a if c.ev_charging else 0.0
+            for c in self._chargers
+        )
+        # When the total service draw is less than the estimated EV draw, the
+        # EVs are drawing less than commanded (e.g. near full charge).
+        # Treat all measured load as non-EV in that case to stay conservative.
+        if service_current_a < total_ev_estimate:
+            total_ev_estimate = 0.0
+
+        non_ev_a = max(0.0, service_current_a - total_ev_estimate)
+        available_a = self._max_service_current - non_ev_a
+
+        # Distribute available current across chargers weighted by priority.
+        charger_specs = [
+            (self.min_ev_current, self.max_charger_current, c.priority)
+            for c in self._chargers
+        ]
+        allocations = distribute_current_weighted(available_a, charger_specs)
+
+        # Apply ramp-up limits and update per-charger state.
         now = self._time_fn()
-        final_a = apply_ramp_up_limit(
-            self.current_set_a,
-            target_a,
-            self._last_reduction_time,
-            now,
-            self.ramp_up_time_s,
-        )
+        finals: list[float] = []
+        any_ramp_held = False
 
-        # Track worsening conditions for ramp-up cooldown.  Restart the
-        # cooldown whenever the commanded current drops OR whenever available
-        # headroom decreases from a level that was previously usable (≥ min).
-        # The second condition catches the case where the charger is already
-        # stopped (current = 0) but the available headroom shrinks further —
-        # a sign that conditions are still deteriorating and the balancer
-        # should not attempt to restart until things have been stable for the
-        # full cooldown period.
-        # Note: self.available_current_a is always a float (initialised to 0.0)
-        # so no None-guard is needed; on the first call available_a >= 0 >=
-        # self.available_current_a, making headroom_worsened False by default.
-        headroom_worsened = (
-            available_a < self.available_current_a
-            and self.available_current_a >= self.min_ev_current
-        )
-        if final_a < self.current_set_a or headroom_worsened:
-            self._last_reduction_time = now
+        for i, (charger, alloc) in enumerate(zip(self._chargers, allocations)):
+            target_i = 0.0 if alloc is None else alloc
+            # Idle clamp: when this charger has a status sensor and the EV is not
+            # actively charging, cap the commanded current to min_ev_current so the
+            # charger idles at the safe minimum rather than advertising full headroom.
+            # Only applies with a status sensor; without one, ev_charging is not a
+            # reliable indicator of whether the EV is idle.
+            if charger.status_entity is not None and not charger.ev_charging and target_i > self.min_ev_current:
+                target_i = self.min_ev_current
+            final_i = apply_ramp_up_limit(
+                charger.current_set_a,
+                target_i,
+                charger.last_reduction_time,
+                now,
+                self.ramp_up_time_s,
+            )
+            headroom_worsened = (
+                available_a < self.available_current_a
+                and self.available_current_a >= self.min_ev_current
+            )
+            if final_i < charger.current_set_a or headroom_worsened:
+                charger.last_reduction_time = now
+            if final_i < target_i:
+                any_ramp_held = True
+            finals.append(final_i)
+
+        total_target = sum(0.0 if a is None else a for a in allocations)
+        total_final = sum(finals)
 
         _LOGGER.debug(
-            "Recompute (%s): service=%.0f W, available=%.1f A, clamped=%.1f A, final=%.1f A",
+            "Recompute (%s): service=%.0f W, available=%.1f A, "
+            "target_total=%.1f A, final_total=%.1f A, chargers=%d",
             reason,
             service_power_w,
             available_a,
-            target_a,
-            final_a,
+            total_target,
+            total_final,
+            len(self._chargers),
         )
 
-        if final_a != target_a:
+        if any_ramp_held:
             _LOGGER.debug(
-                "Ramp-up cooldown holding current at %.1f A (target %.1f A)",
-                final_a,
-                target_a,
+                "Ramp-up cooldown holding at least one charger below target"
             )
 
-        # Determine balancer operational state
-        ramp_up_held = final_a < target_a
-
-        # Update computed state and execute actions
-        self._update_and_notify(round(available_a, 2), final_a, reason, ramp_up_held)
+        self._update_and_notify(
+            round(available_a, 2),
+            total_final,
+            reason,
+            any_ramp_held,
+            per_charger_finals=finals,
+        )
 
     # ------------------------------------------------------------------
     # State update, action execution, and entity notification
@@ -734,6 +983,7 @@ class EvLoadBalancerCoordinator:
         current_a: float,
         reason: str = "",
         ramp_up_held: bool = False,
+        per_charger_finals: list[float] | None = None,
     ) -> None:
         """Update state, fire charger actions for transitions, and notify entities.
 
@@ -741,17 +991,37 @@ class EvLoadBalancerCoordinator:
         required charger action calls, fires HA events for notable conditions,
         and sends the HA dispatcher signal so entity platforms can refresh.
 
+        When *per_charger_finals* is provided (multi-charger recompute path),
+        per-charger state is updated before scheduling actions.  When absent
+        (fallback / manual override paths), *current_a* is treated as an
+        **aggregate** limit for the entire config entry; it is split equally
+        across all configured chargers, subject to the per-charger maximum,
+        whole-amp step floor, and minimum EV current guard.  The coordinator's
+        ``current_set_a`` is always updated to the final aggregate total so
+        state sensors accurately reflect the total current being commanded.
+
         A defense-in-depth safety clamp ensures the output never exceeds
         the service or charger limits, even if upstream logic has a bug.
         """
-        # Safety clamp: output must never exceed charger max or service limit
-        clamped_a = clamp_to_safe_output(current_a, self.max_charger_current, self._max_service_current)
+        # Safety clamp: output must never exceed the aggregate charger maximum
+        # (n_chargers × per-charger max) or the service limit, even if upstream
+        # logic has a bug.  For a single charger this equals max_charger_current.
+        # Guard against an empty list (should not happen in practice, but avoids
+        # a division-by-zero style edge case if the coordinator is ever constructed
+        # without chargers before _load_chargers runs).
+        n_chargers = max(1, len(self._chargers))
+        clamped_a = clamp_to_safe_output(
+            current_a,
+            n_chargers * self.max_charger_current,
+            self._max_service_current,
+        )
         if clamped_a != current_a:
             _LOGGER.warning(
                 "Safety clamp: computed %.1f A exceeds safe maximum %.1f A "
-                "(charger_max=%.1f, service_max=%.1f) — clamping",
+                "(chargers=%d, charger_max=%.1f, service_max=%.1f) — clamping",
                 current_a,
                 clamped_a,
+                n_chargers,
                 self.max_charger_current,
                 self._max_service_current,
             )
@@ -759,6 +1029,76 @@ class EvLoadBalancerCoordinator:
 
         prev_active = self.active
         prev_current = self.current_set_a
+
+        # Capture per-charger previous state before updating.
+        prev_charger_currents = [c.current_set_a for c in self._chargers]
+        prev_charger_actives = [c.active for c in self._chargers]
+
+        # Update per-charger state from per_charger_finals when available,
+        # otherwise distribute current_a to each charger (fallback / manual).
+        if per_charger_finals is not None:
+            # Defense in depth: clamp each per-charger value to [0, max_charger_current].
+            # This applies to both the normal load-balancing path (where the algorithm
+            # already respects this limit) and the per-charger fallback path (where values
+            # come directly from user-configured constants that could exceed the limit).
+            clamped_values: list[float] = [
+                min(max(final_i, 0.0), self.max_charger_current)
+                for final_i in per_charger_finals
+            ]
+            # Enforce the service limit on the aggregate by scaling all values down
+            # proportionally. The load-balancing algorithm already respects the service
+            # limit, so this guard only fires in the per-charger fallback path where each
+            # charger's value comes from config and the aggregate may exceed the breaker
+            # rating (e.g. 2 chargers × 20 A = 40 A on a 32 A service).
+            aggregate_f = sum(clamped_values)
+            if self._max_service_current > 0 and aggregate_f > self._max_service_current:
+                scale = self._max_service_current / aggregate_f
+                clamped_values = [v * scale for v in clamped_values]
+                aggregate_f = sum(clamped_values)
+            # Floor to whole-amp steps and re-enforce the minimum safe current in
+            # one pass. Any floored value between 1 A and min_ev_current is unsafe
+            # to command; those chargers are stopped (0 A). Flooring only reduces
+            # values, so the aggregate remains ≤ service limit.
+            min_a = self.min_ev_current
+            int_values: list[int] = [
+                floored if floored == 0 or floored >= min_a else 0
+                for v in clamped_values
+                for floored in (int(v),)
+            ]
+            aggregate_int = sum(int_values)
+            # Apply the final per-charger currents.
+            for charger, value in zip(self._chargers, int_values):
+                charger.active = value > 0
+                charger.current_set_a = float(value)
+            # Ensure current_a reflects the actual aggregate being commanded.
+            current_a = float(aggregate_int)
+        else:
+            # Fallback / manual path: current_a is an aggregate value for this config
+            # entry. Split equally across all chargers, respecting per-charger limits.
+            requested_aggregate = max(current_a, 0.0)
+            # Service-limit guard (defense-in-depth; clamp_to_safe_output above already
+            # handles the normal path, but the aggregate may still exceed the limit when
+            # a per-charger fallback value was multiplied by the number of chargers before
+            # being passed here, e.g. in _apply_fallback_current for set_current mode).
+            if self._max_service_current > 0 and requested_aggregate > self._max_service_current:
+                requested_aggregate = float(self._max_service_current)
+            # Equal per-charger share from the aggregate, capped at the per-charger max.
+            # n_chargers is always >= 1 (ensured by max(1, ...) above) so no zero-division risk.
+            per_charger_value = requested_aggregate / n_chargers
+            per_charger_value = min(per_charger_value, self.max_charger_current)
+            # Floor to whole-amp steps (charger scripts expect integer ampere steps).
+            per_charger_value = float(int(per_charger_value))
+            # Minimum safe current: either 0 A (stop) or >= min_ev_current.
+            # (e.g. 10 A service / 2 chargers = 5 A < 6 A min → stop both)
+            if 0 < per_charger_value < self.min_ev_current:
+                per_charger_value = 0.0
+            aggregate = per_charger_value * n_chargers
+            for charger in self._chargers:
+                charger.active = per_charger_value > 0
+                charger.current_set_a = per_charger_value
+            # Update current_a to the aggregate total so self.current_set_a below
+            # reflects what is actually being commanded across all chargers.
+            current_a = aggregate
 
         self.available_current_a = available_a
         self.current_set_a = current_a
@@ -784,9 +1124,13 @@ class EvLoadBalancerCoordinator:
             if self._action_task and not self._action_task.done():
                 self._action_task.cancel()
             self._action_task = self.hass.async_create_task(
-                self._execute_actions(prev_active, prev_current),
+                self._execute_actions(prev_charger_actives, prev_charger_currents),
                 eager_start=False,
             )
+
+        # Refresh the ev_charging diagnostic so the binary sensor accurately reflects
+        # the new per-charger current_set_a values set above (not the pre-recompute state).
+        self._refresh_ev_charging()
 
         async_dispatcher_send(self.hass, self.signal_update)
 
@@ -908,66 +1252,91 @@ class EvLoadBalancerCoordinator:
         )
 
     def _has_actions(self) -> bool:
-        """Return True if any charger action script is configured."""
-        return bool(
-            self._action_set_current
-            or self._action_stop_charging
-            or self._action_start_charging
-        )
+        """Return True if any charger has at least one action script configured."""
+        return any(c.has_actions() for c in self._chargers)
+
+    async def _execute_charger_transition(
+        self,
+        charger: _ChargerState,
+        charger_num: int,
+        charger_id: str,
+        prev_active: bool,
+        prev_current: float,
+    ) -> None:
+        """Execute the action(s) for a single charger based on its state transition.
+
+        Dispatches start_charging + set_current on resume, stop_charging on stop,
+        and set_current when only the current level changes.  No action is taken
+        when the charger state has not changed.
+        """
+        new_active = charger.active
+        new_current = charger.current_set_a
+        current_w = round(new_current * self._voltage, 1)
+
+        if new_active and not prev_active:
+            await self._call_action(
+                charger.action_start_charging,
+                "start_charging",
+                charger_id=charger_id,
+                charger_num=charger_num,
+            )
+            await self._call_action(
+                charger.action_set_current,
+                "set_current",
+                charger_id=charger_id,
+                charger_num=charger_num,
+                current_a=new_current,
+                current_w=current_w,
+            )
+        elif not new_active and prev_active:
+            await self._call_action(
+                charger.action_stop_charging,
+                "stop_charging",
+                charger_id=charger_id,
+                charger_num=charger_num,
+            )
+        elif new_active and new_current != prev_current:
+            await self._call_action(
+                charger.action_set_current,
+                "set_current",
+                charger_id=charger_id,
+                charger_num=charger_num,
+                current_a=new_current,
+                current_w=current_w,
+            )
 
     async def _execute_actions(
-        self, prev_active: bool, prev_current: float
+        self,
+        prev_charger_actives: list[bool],
+        prev_charger_currents: list[float],
     ) -> None:
-        """Execute the appropriate charger action(s) based on state transitions.
+        """Execute the appropriate action(s) for each charger based on state transitions.
 
-        Transition rules:
+        For each charger the transition rules are:
         - **Resume** (was stopped, now active): call start_charging then set_current.
         - **Stop** (was active, now stopped): call stop_charging.
         - **Adjust** (was active, still active, current changed): call set_current.
         - **No change**: no action is executed.
 
         Cancelled automatically when a newer state change triggers a new
-        action cycle, so stale retries do not interfere with current actions.
+        action cycle so stale retries do not interfere with current actions.
 
         Every action receives a ``charger_id`` variable (the config entry ID)
-        so scripts can address the correct charger.  The ``set_current`` action
-        additionally receives ``current_a`` (amps) and ``current_w`` (watts)
-        so charger scripts can use whichever unit their hardware requires.
+        and a ``charger_num`` variable (1-based charger index) so scripts can
+        address the correct charger — ``charger_num`` is the stable per-charger
+        identifier that distinguishes multiple chargers on the same entry.
+        The ``set_current`` action additionally receives ``current_a`` (amps)
+        and ``current_w`` (watts) so charger scripts can use whichever unit
+        their hardware requires.
         """
-        new_active = self.active
-        new_current = self.current_set_a
         charger_id = self.entry.entry_id
-        current_w = round(new_current * self._voltage, 1)
-
-        if new_active and not prev_active:
-            # Resume: start charging, then set the target current
-            await self._call_action(
-                self._action_start_charging,
-                "start_charging",
-                charger_id=charger_id,
-            )
-            await self._call_action(
-                self._action_set_current,
-                "set_current",
-                charger_id=charger_id,
-                current_a=new_current,
-                current_w=current_w,
-            )
-        elif not new_active and prev_active:
-            # Stop charging
-            await self._call_action(
-                self._action_stop_charging,
-                "stop_charging",
-                charger_id=charger_id,
-            )
-        elif new_active and new_current != prev_current:
-            # Current changed while active — adjust
-            await self._call_action(
-                self._action_set_current,
-                "set_current",
-                charger_id=charger_id,
-                current_a=new_current,
-                current_w=current_w,
+        for charger_num, (charger, prev_active_i, prev_current_i) in enumerate(
+            zip(self._chargers, prev_charger_actives, prev_charger_currents), start=1
+        ):
+            if not charger.has_actions():
+                continue
+            await self._execute_charger_transition(
+                charger, charger_num, charger_id, prev_active_i, prev_current_i
             )
 
         # Refresh diagnostic sensors after actions complete — the initial
