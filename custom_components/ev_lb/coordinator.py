@@ -362,9 +362,38 @@ class EvLoadBalancerCoordinator:
         reflects the current charger state even between power-meter events.  No
         recompute is performed here — the current calculation is based on the
         power-meter reading and will be updated on the next meter event.
+
+        When the EV transitions from not-charging to charging while the charger
+        is already commanding a non-zero current (i.e., idle at ``min_ev_current``),
+        the ramp-up cooldown is reset so that the first power-meter recompute after
+        the EV starts drawing current will hold the current at the idle level rather
+        than jumping immediately to the full available headroom.  When the charger
+        is stopped (0 A), no ramp-up trigger is set — the normal cooldown logic
+        from the previous reduction handles the gradual increase.
+
+        The ramp-up cooldown is only reset when the status sensor transitions
+        explicitly to the ``CHARGING_STATE_VALUE`` state.  Transitions to
+        ``unknown``/``unavailable`` are excluded: those use the safe fallback
+        (assume charging) for the ``ev_charging`` flag, but should not be treated
+        as an EV-start event that warrants a ramp-up cooldown reset.
         """
+        new_state = event.data.get("new_state")
+        new_state_str = new_state.state if new_state is not None else None
         new_ev_charging = self._is_ev_charging()
         if new_ev_charging != self.ev_charging:
+            if (
+                not self.ev_charging
+                and new_state_str == CHARGING_STATE_VALUE
+                and self.current_set_a > 0
+            ):
+                # EV just started charging (explicit Charging state, not a glitch to
+                # unknown/unavailable) while the charger was at idle current.
+                # Trigger ramp-up on the next recompute so the current rises
+                # gradually from min_ev_current rather than jumping immediately.
+                self._last_reduction_time = self._time_fn()
+                _LOGGER.debug(
+                    "EV started charging — ramp-up cooldown reset to hold at min_ev_current",
+                )
             self.ev_charging = new_ev_charging
             _LOGGER.debug(
                 "Charger status changed — ev_charging updated to %s",
@@ -674,6 +703,14 @@ class EvLoadBalancerCoordinator:
         )
         target_a = 0.0 if clamped is None else clamped
 
+        # When the EV is not actively charging, cap the commanded current to
+        # min_ev_current.  This tells the charger "you may draw at most the
+        # minimum safe current" while the EV is idle or paused, so that when
+        # the EV does start drawing current the transition begins from a
+        # predictable low value and the ramp-up cooldown can apply smoothly.
+        if not self.ev_charging and target_a > self.min_ev_current:
+            target_a = self.min_ev_current
+
         # Apply ramp-up limit (instant down, delayed up)
         now = self._time_fn()
         final_a = apply_ramp_up_limit(
@@ -703,7 +740,7 @@ class EvLoadBalancerCoordinator:
             self._last_reduction_time = now
 
         _LOGGER.debug(
-            "Recompute (%s): service=%.0f W, available=%.1f A, clamped=%.1f A, final=%.1f A",
+            "Recompute (%s): service=%.0f W, available=%.1f A, target=%.1f A, final=%.1f A",
             reason,
             service_power_w,
             available_a,
