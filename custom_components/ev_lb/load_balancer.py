@@ -297,10 +297,12 @@ def apply_ramp_up_limit(
         - Equal to *prev_a* (hold) when the window has not elapsed yet.
 
         *new_headroom_stable_since* is the updated stability timer state:
-        - ``None`` when stability was reset (reduction taken, step taken, or
-          this is the very first call with *headroom_stable_since* = ``None``
-          and the window has not elapsed — the timer started this cycle).
-        - A monotonic timestamp when tracking is in progress (hold state).
+        - ``None`` when stability was reset (a reduction was applied or a
+          step upward was taken and the caller must restart tracking if
+          further increases are desired).
+        - A monotonic timestamp when tracking is in progress (hold state),
+          including the first cycle where *headroom_stable_since* was ``None``
+          and the stability window has not yet elapsed.
     """
     if target_a <= prev_a:
         # Instant reduction — clear stability tracking
