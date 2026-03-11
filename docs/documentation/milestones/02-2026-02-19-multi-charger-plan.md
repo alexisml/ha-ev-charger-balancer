@@ -106,8 +106,10 @@ The algorithm never withholds current from chargers that can use it. Surplus fre
 
 | PR milestone | Scope | Exit criteria |
 |---|---|---|
-| PR-1-ph2: Multi-charger data model | Extend config/options flow to support N chargers. Each charger gets its own script, limit, and priority fields. | N chargers can be configured; each has a stable unique ID; per-charger entities are linked to per-charger HA devices; options flow supports adding/removing/editing chargers without restart. |
-| PR-2-ph2: Priority distribution engine | Implement the proportional priority distribution algorithm in `load_balancer.py`. Replace the single-charger `compute_target_current` path in the coordinator with the multi-charger path. | Available current is allocated proportionally to charger priorities; surplus from capped/stopped chargers is redistributed; tie-breaking by index is correct; all edge cases covered by unit tests. |
+| PR-1a-ph2: Per-charger data model | Extend the config entry schema to store N chargers. Each charger gets its own unique ID, script entities, current limits, priority, and fallback current. | N chargers can be configured in the config/options flow; each charger has a stable unique ID; data round-trips correctly through HA config entries; unit tests for schema validation pass. |
+| PR-1b-ph2: Per-charger HA entities & devices | Create per-charger HA entity objects and link them to per-charger HA device entries. | Each configured charger appears as a separate device in HA; all per-charger output entities (`current_set_a`, `balancer_state`, etc.) are attached to the correct device; entity registry integration tests pass. |
+| PR-2a-ph2: Priority distribution algorithm | Implement the proportional priority distribution logic as a pure function in `load_balancer.py` with no coordinator coupling. | Available current is allocated proportionally to charger priorities; surplus from capped/stopped chargers is redistributed; tie-breaking by `charger_index` is correct; all edge cases covered by unit tests; no HA runtime required. |
+| PR-2b-ph2: Wire distribution engine into coordinator | Replace the single-charger `compute_target_current` path in the coordinator with the multi-charger distribution engine. Apply ramp-up cooldown and idle clamp per charger. | End-to-end integration test: N chargers receive proportional current on each coordinator cycle; ramp-up hold and idle clamp behave correctly per charger; CI green. |
 | PR-3-ph2: Runtime charger management | Options flow for adding/removing chargers and updating priority at runtime. | Chargers can be added/removed and priorities changed at runtime; entities/device links remain consistent; options-flow integration tests pass. |
 | PR-4-ph2: Test stabilization + release | Full integration tests for multi-charger scenarios; documentation updated. | CI green; multi-charger configuration documented in user manual and how-it-works; release notes updated. |
 
@@ -121,7 +123,9 @@ The algorithm never withholds current from chargers that can use it. Surplus fre
 
 | Step | PR | Owner | ETA | Deliverable | Status |
 |------|-----|-------|-----|-------------|--------|
-| Multi-charger data model | PR-1-ph2 | alexisml | post-MVP | Config/options flow for N chargers + priority field | |
-| Priority distribution engine | PR-2-ph2 | alexisml | post-MVP | Proportional priority allocation algorithm + unit tests | |
+| Per-charger data model | PR-1a-ph2 | alexisml | post-MVP | Config entry schema for N chargers + priority/fallback fields + unit tests | |
+| Per-charger HA entities & devices | PR-1b-ph2 | alexisml | post-MVP | Per-charger HA device entries + output entity objects | |
+| Priority distribution algorithm | PR-2a-ph2 | alexisml | post-MVP | Pure proportional allocation function in `load_balancer.py` + unit tests | |
+| Wire distribution engine | PR-2b-ph2 | alexisml | post-MVP | Coordinator wired to multi-charger engine + integration tests | |
 | Runtime charger management | PR-3-ph2 | alexisml | post-MVP | Options flow for add/remove chargers + priority update | |
 | Test stabilization + release | PR-4-ph2 | alexisml | post-MVP | Full integration tests, updated docs | |
