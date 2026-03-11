@@ -270,7 +270,7 @@ flowchart TD
 
 The **cooldown timer resets** whenever either of these happens:
 - The commanded current drops (direct reduction).
-- Available headroom decreases from a previously usable level (≥ `min_ev_current`) — even when the charger is already stopped at 0 A. This prevents a premature restart attempt if load conditions worsen again while the charger is waiting to resume.
+- Available headroom drops **below** `min_ev_current` after being at or above it — i.e., conditions have deteriorated to the point where charging is no longer viable. Minor fluctuations that keep headroom above `min_ev_current` (e.g., 20 A → 19 A) do **not** reset the timer; only a drop into the insufficient zone does.
 - **The EV starts charging** (status sensor transitions to `Charging`) while the charger is idling at `min_ev_current`. This prevents the current from jumping immediately to the full available headroom when the EV begins drawing; instead, the current increases gradually over the ramp-up period, just like after any other reduction.
 
 > ⚠️ **Very low cooldown values (below ~10 s) risk instability** if your service load has frequent spikes or is unpredictable. The recommended minimum is 20–30 s for most installations.

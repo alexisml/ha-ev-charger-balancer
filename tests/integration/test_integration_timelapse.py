@@ -375,8 +375,9 @@ class TestChargingTimelapseWithIsChargingSensor:
         assert hass.states.get(state_id).state == STATE_STOPPED
 
         # Several more updates while headroom is above min but cooldown active.
-        # Values are non-decreasing: a decrease from above min would reset the
-        # cooldown timer, which would delay the expected Step 7b resume time.
+        # These fluctuate slightly to reflect realistic load behaviour; because
+        # all values stay ≥ min_ev_current the headroom_worsened condition does
+        # NOT fire, so the cooldown timer is not reset by these events.
         for t_delta, avail in [(5.0, 10.5), (10.0, 11.0)]:
             mock_time = 1040.0 + t_delta
             hass.states.async_set(POWER_METER, meter_for_available(avail, 0.0))

@@ -723,18 +723,22 @@ class EvLoadBalancerCoordinator:
 
         # Track worsening conditions for ramp-up cooldown.  Restart the
         # cooldown whenever the commanded current drops OR whenever available
-        # headroom decreases from a level that was previously usable (≥ min).
-        # The second condition catches the case where the charger is already
-        # stopped (current = 0) but the available headroom shrinks further —
-        # a sign that conditions are still deteriorating and the balancer
-        # should not attempt to restart until things have been stable for the
-        # full cooldown period.
+        # headroom falls from a previously usable level (≥ min) to below the
+        # minimum needed to charge (< min).  This catches the case where the
+        # charger is already stopped (current = 0) but the available headroom
+        # shrinks back below the minimum — a sign that conditions are still
+        # too bad to restart and the balancer should wait another full cooldown
+        # period before attempting to resume.
+        # Deliberately excludes minor fluctuations that stay above min_ev_current
+        # (e.g., 20 A → 19.5 A) to avoid continuously extending the cooldown
+        # while load naturally oscillates at a level that could support charging.
         # Note: self.available_current_a is always a float (initialised to 0.0)
         # so no None-guard is needed; on the first call available_a >= 0 >=
         # self.available_current_a, making headroom_worsened False by default.
         headroom_worsened = (
             available_a < self.available_current_a
             and self.available_current_a >= self.min_ev_current
+            and available_a < self.min_ev_current
         )
         if final_a < self.current_set_a or headroom_worsened:
             self._last_reduction_time = now

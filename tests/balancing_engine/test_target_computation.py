@@ -264,3 +264,61 @@ class TestRampUpCooldown:
         await hass.async_block_till_done()
         after_cooldown = float(hass.states.get(current_set_id).state)
         assert after_cooldown > reduced
+
+    async def test_headroom_fluctuation_above_min_does_not_extend_cooldown(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Natural load oscillations that keep headroom above the minimum never extend the ramp-up cooldown.
+
+        After a reduction triggers the cooldown, the household load commonly oscillates
+        slightly around its new value.  Each small uptick in load causes headroom to dip
+        a little (e.g., 18 A → 17 A) while remaining well above min_ev_current.  These
+        micro-fluctuations must not keep resetting the cooldown timer, which would create
+        an indefinite delay before the charger can increase again — the root cause of the
+        reported 8-minute ramp-up lag.
+        """
+        await setup_integration(hass, mock_config_entry)
+        coordinator = mock_config_entry.runtime_data
+        coordinator.ramp_up_time_s = 30.0
+
+        mock_time = 1000.0
+
+        def fake_monotonic():
+            return mock_time
+
+        coordinator._time_fn = fake_monotonic
+
+        # Step 1: initial light load → charger runs near max
+        hass.states.async_set(POWER_METER, "3000")
+        await hass.async_block_till_done()
+
+        current_set_id = get_entity_id(hass, mock_config_entry, "sensor", "current_set")
+        initial = float(hass.states.get(current_set_id).state)
+        assert initial == 18.0
+
+        # Step 2: heavy load spike → reduction at t=1001; headroom now ~15 A
+        mock_time = 1001.0
+        hass.states.async_set(POWER_METER, "8000")
+        await hass.async_block_till_done()
+        reduced = float(hass.states.get(current_set_id).state)
+        assert reduced == 15.0
+
+        # Step 3: load returns to near-original but oscillates slightly downward each
+        # event — headroom stays well above min_ev_current throughout.  Without the
+        # fix these micro-drops would each reset _last_reduction_time, keeping the
+        # charger stuck at the reduced current indefinitely.
+        for t, power in [(1010.0, "3100"), (1015.0, "3200"), (1020.0, "3050"), (1025.0, "3150")]:
+            mock_time = t
+            hass.states.async_set(POWER_METER, power)
+            await hass.async_block_till_done()
+            assert float(hass.states.get(current_set_id).state) == reduced  # still held by cooldown
+
+        # Step 4: cooldown elapses (31 s since the reduction at t=1001) → increase allowed
+        mock_time = 1032.0  # 31 s after reduction
+        hass.states.async_set(POWER_METER, "3001")
+        await hass.async_block_till_done()
+        after_cooldown = float(hass.states.get(current_set_id).state)
+        assert after_cooldown > reduced, (
+            "Current did not increase after cooldown elapsed — load fluctuations above "
+            "min_ev_current likely kept resetting _last_reduction_time"
+        )
