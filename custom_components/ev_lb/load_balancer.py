@@ -9,7 +9,7 @@ Functions:
     compute_target_current      — full single-charger target from service meter (amps)
     clamp_current               — per-charger min/max/step clamping
     distribute_current          — water-filling distribution across N chargers
-    apply_ramp_up_limit         — cooldown before allowing current increase
+    apply_ramp_up_limit         — stability window before allowing current increase
     clamp_to_safe_output        — defense-in-depth output safety clamp
     resolve_balancer_state      — operational state string from balancer conditions
     resolve_fallback_current    — fallback current when power meter is unavailable
@@ -254,39 +254,72 @@ def distribute_current(
 def apply_ramp_up_limit(
     prev_a: float,
     target_a: float,
-    last_reduction_time: Optional[float],
+    headroom_stable_since: Optional[float],
     now: float,
     ramp_up_time_s: float,
-) -> float:
-    """Prevent increasing current before the ramp-up cooldown has elapsed.
+    step_a: float,
+) -> tuple[float, Optional[float]]:
+    """Delay current increases until headroom has been continuously stable.
 
     **Reductions are always applied instantly** — this function never delays a
-    decrease in current.  Only increases are subject to the cooldown: after a
-    dynamic current reduction the app waits *ramp_up_time_s* seconds before
-    allowing the target to rise again.  This avoids oscillation when household
-    load fluctuates around the service limit.
+    decrease in current.  Only increases are subject to the stability window:
+    the commanded current rises only after the computed target has remained
+    above the current commanded level for *ramp_up_time_s* seconds without
+    interruption.  This avoids oscillation when household load fluctuates
+    around the service limit.
+
+    Each stability expiry allows the current to rise by at most *step_a* Amps
+    toward *target_a*.  If the target is not yet reached the caller must reset
+    the stability timer (by passing back the returned ``None``) so the next
+    step also requires a full stability window.  When *step_a* is 0 the current
+    jumps directly to *target_a* on the first expiry.
 
     Args:
-        prev_a:              Current charging current in Amps (last set value).
-        target_a:            Newly computed target current in Amps.
-        last_reduction_time: Monotonic timestamp (seconds) when the current was
-                             last reduced for this charger, or ``None`` if there
-                             has been no reduction yet.
-        now:                 Current monotonic timestamp in seconds.
-        ramp_up_time_s:      Cooldown period in seconds before an increase is
-                             allowed after a reduction.
+        prev_a:                Current commanded current in Amps.
+        target_a:              Newly computed target current in Amps.
+        headroom_stable_since: Monotonic timestamp (s) when headroom first
+                               became sufficient for the next step, or ``None``
+                               if tracking has not started yet.
+        now:                   Current monotonic timestamp in seconds.
+        ramp_up_time_s:        Required stability window in seconds before each
+                               step is allowed.
+        step_a:                Maximum current increase per stability period in
+                               Amps.  0 means jump directly to *target_a*.
 
     Returns:
-        *target_a* immediately when the target is lower than or equal to
-        *prev_a* (instant reduction), or when no prior reduction has been
-        recorded, or when the cooldown has already elapsed.  Returns *prev_a*
-        (hold) only when the cooldown period has not yet elapsed.
+        A ``(final_a, new_headroom_stable_since)`` tuple.
+
+        *final_a* is the commanded current after applying the limit:
+        - Equal to *target_a* when the target is lower or equal (instant
+          reduction) or when the stability window has elapsed.
+        - Equal to ``min(prev_a + step_a, target_a)`` when the window elapsed
+          and *step_a* > 0 (one step taken).
+        - Equal to *prev_a* (hold) when the window has not elapsed yet.
+
+        *new_headroom_stable_since* is the updated stability timer state:
+        - ``None`` when stability was reset (a reduction was applied or a
+          step upward was taken and the caller must restart tracking if
+          further increases are desired).
+        - A monotonic timestamp when tracking is in progress (hold state),
+          including the first cycle where *headroom_stable_since* was ``None``
+          and the stability window has not yet elapsed.
     """
-    if target_a > prev_a and last_reduction_time is not None:
-        elapsed = now - last_reduction_time
-        if elapsed < ramp_up_time_s:
-            return prev_a
-    return target_a
+    if target_a <= prev_a:
+        # Instant reduction — clear stability tracking
+        return target_a, None
+
+    # Target is above current; start or continue the stability window
+    stable_since = headroom_stable_since if headroom_stable_since is not None else now
+    elapsed = now - stable_since
+
+    if elapsed < ramp_up_time_s:
+        # Not stable long enough yet — hold and continue tracking
+        return prev_a, stable_since
+
+    # Stability achieved — take one step (up to step_a, capped at target)
+    final_a = min(prev_a + step_a, target_a) if step_a > 0 else target_a
+    # Reset stability tracking; caller will restart it if more steps remain
+    return final_a, None
 
 
 def clamp_to_safe_output(
@@ -331,7 +364,7 @@ def resolve_balancer_state(
 
     - ``"disabled"``     — load balancing switch is off
     - ``"stopped"``      — charger target is 0 A
-    - ``"ramp_up_hold"`` — an increase is needed but the cooldown blocks it
+    - ``"ramp_up_hold"`` — an increase is needed but the stability window blocks it
     - ``"adjusting"``    — the current changed or charging just started
     - ``"active"``       — charger is running at a steady current (no change)
 
@@ -343,7 +376,7 @@ def resolve_balancer_state(
         prev_active:   Whether the charger was active before this cycle.
         prev_current:  The charging current set in the previous cycle (Amps).
         current_set_a: The charging current set in this cycle (Amps).
-        ramp_up_held:  Whether the ramp-up cooldown is blocking an increase.
+        ramp_up_held:  Whether the ramp-up stability window is blocking an increase.
 
     Returns:
         One of ``"disabled"``, ``"stopped"``, ``"ramp_up_hold"``,

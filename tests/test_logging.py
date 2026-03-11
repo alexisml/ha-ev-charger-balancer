@@ -59,7 +59,7 @@ class TestCoordinatorDebugLogs:
             hass.states.async_set(POWER_METER, "3000")
             await hass.async_block_till_done()
 
-        assert any("Ramp-up cooldown holding" in m for m in caplog.messages)
+        assert any("Ramp-up holding at" in m for m in caplog.messages)
 
     async def test_disabled_skip_logs_at_debug(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry, caplog

@@ -77,12 +77,12 @@ flowchart TD
 
 **Symptoms:** After household load drops, the charger current stays low and doesn't ramp back up.
 
-**Cause:** This is usually the ramp-up cooldown working as designed. After any reduction, the integration waits **30 seconds** before allowing increases. This prevents oscillation.
+**Cause:** This is the ramp-up stability window working as designed. After any reduction, the integration requires the computed headroom to remain continuously sufficient for the configured stability window (default: **15 s**) before allowing each step up. The current then rises by at most **`ramp_up_step_a`** Amps (default: **4 A**) per window, not all the way to the target in one jump. This prevents oscillation.
 
 **What to check:**
-1. Wait at least 30 seconds after the last reduction.
-2. Check `sensor.*_balancer_state` — if it shows `ramp_up_hold`, the cooldown is active.
-3. After the cooldown, the current should increase on the next power-meter event.
+1. Wait for the stability window to elapse after the last reduction (default: 15 s per step). Multiple steps may be needed if the gap between current and target is large.
+2. Check `sensor.*_balancer_state` — if it shows `ramp_up_hold`, the stability window is active.
+3. After the stability window elapses, the current should rise by one step on the next power-meter event.
 
 ### Sensors show "unavailable" after restart
 
@@ -142,13 +142,13 @@ You'll only see messages when charging starts or stops. Normal current adjustmen
 
 **DEBUG** — full computation pipeline on every meter event:
 ```
-DEBUG Recompute (power_meter_update): house=3000 W, available=19.0 A, raw_target=19.0 A, clamped=18.0 A, final=18.0 A
+DEBUG Recompute (power_meter_update): service=3000 W, available=19.0 A, target=18.0 A, final=18.0 A
 ```
-This tells you exactly what the integration computed: house power, available headroom, raw target, clamped target, and final output.
+This tells you exactly what the integration computed: service power, available headroom, target current, and final output after the ramp-up stability check.
 
-When the ramp-up cooldown is blocking an increase:
+When the ramp-up stability window is holding an increase:
 ```
-DEBUG Ramp-up cooldown holding current at 17.0 A (target 32.0 A)
+DEBUG Ramp-up holding at 17.0 A — waiting for 15 s of stable headroom (target 32.0 A, next step 4.0 A)
 ```
 
 When load balancing is disabled:
@@ -186,19 +186,18 @@ flowchart LR
 Here's how to interpret a typical debug log entry:
 
 ```
-Recompute (power_meter_update): house=3000 W, available=19.0 A, raw_target=19.0 A, clamped=18.0 A, final=18.0 A
+Recompute (power_meter_update): service=3000 W, available=19.0 A, target=18.0 A, final=18.0 A
 ```
 
 | Field | Meaning |
 |---|---|
 | `power_meter_update` | Trigger: a new meter reading arrived |
-| `house=3000 W` | Total household power consumption right now |
-| `available=19.0 A` | Headroom: `service_current - (house_power / voltage)` |
-| `raw_target=19.0 A` | Current charger setting + available headroom |
-| `clamped=18.0 A` | Raw target capped at charger max and floored to 1 A |
-| `final=18.0 A` | After ramp-up cooldown check — this is what gets sent to the charger |
+| `service=3000 W` | Total household power consumption (service meter reading) |
+| `available=19.0 A` | Headroom: `service_current - (service_power / voltage)` |
+| `target=18.0 A` | Target capped at charger max and floored to 1 A steps |
+| `final=18.0 A` | After ramp-up stability window check — this is what gets sent to the charger |
 
-If `final` ≠ `clamped`, the ramp-up cooldown is holding the current.
+If `final` ≠ `target`, the ramp-up stability window is holding the current.
 
 ---
 
@@ -295,11 +294,13 @@ See [How It Works — Restart behavior](how-it-works.md#home-assistant-restart-b
 
 ### How fast does it react to load changes?
 
-The balancer is event-driven and reacts on the same HA event-loop tick as the power-meter state change. In practice this means sub-second response for reductions. Increases are subject to the 30-second ramp-up cooldown.
+The balancer is event-driven and reacts on the same HA event-loop tick as the power-meter state change. In practice this means sub-second response for reductions. Increases are stepped and delayed by the ramp-up stability window (default 15 s per step, 4 A per step).
 
-### Can I change the ramp-up cooldown time?
+### Can I change the ramp-up timing and step size?
 
-Yes. The ramp-up cooldown defaults to 30 seconds and is adjustable via `number.*_ramp_up_cooldown` in the entity dashboard. The allowed range is 5–300 seconds. Lower values respond faster but risk oscillation on spiky loads; 20–30 s is recommended for most installations.
+Yes. Two number entities control the ramp-up behavior:
+- `number.*_ramp_up_time` — the stability window in seconds (default 15 s, range 5–300 s). Lower values react faster but risk oscillation on spiky loads.
+- `number.*_ramp_up_step` — the maximum current increase per stability window (default 4 A, range 1–32 A). Larger values reach full current in fewer steps; smaller values give more gradual recovery.
 
 ### Can I set up multiple instances for different power meters?
 

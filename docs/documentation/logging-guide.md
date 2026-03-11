@@ -35,12 +35,17 @@ INFO  Charging stopped (was 18.0 A, reason=power_meter_update)
 
 **DEBUG** — full pipeline on every recompute cycle:
 ```
-DEBUG Recompute (power_meter_update): house=3000 W, available=19.0 A, raw_target=19.0 A, clamped=18.0 A, final=18.0 A
+DEBUG Recompute (power_meter_update): service=3000 W, available=19.0 A, target=18.0 A, final=18.0 A
 ```
 
-When ramp-up cooldown blocks an increase:
+When the ramp-up stability window is holding an increase:
 ```
-DEBUG Ramp-up cooldown holding current at 17.0 A (target 32.0 A)
+DEBUG Ramp-up holding at 17.0 A — waiting for 15 s of stable headroom (target 32.0 A, next step 4.0 A)
+```
+
+When a ramp-up step is taken:
+```
+DEBUG Ramp-up step: 17.0 A → 21.0 A (target 32.0 A, step 4.0 A)
 ```
 
 When load balancing is disabled:
@@ -69,7 +74,7 @@ The integration exposes a **Balancer state** diagnostic sensor (`sensor.*_balanc
 | `stopped`     | Target current is 0 A (overload or initial state)          |
 | `active`      | Target current > 0 and unchanged this cycle (steady state) |
 | `adjusting`   | Target current changed this cycle                          |
-| `ramp_up_hold` | Increase blocked by ramp-up cooldown                      |
+| `ramp_up_hold` | Increase blocked by ramp-up stability window               |
 | `disabled`    | Load balancing switch is off                               |
 
 ## Meter health and fallback sensors

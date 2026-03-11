@@ -80,6 +80,9 @@
       "configured_fallback": {
         "name": "Configured meter fallback"
       },
+      "ramp_up_next_step": {
+        "name": "Next ramp-up step"
+      },
       "last_action_error": {
         "name": "Last action error"
       },
@@ -118,7 +121,10 @@
         "name": "Min EV current"
       },
       "ramp_up_time": {
-        "name": "Ramp-up cooldown"
+        "name": "Ramp-up stability window"
+      },
+      "ramp_up_step": {
+        "name": "Ramp-up step size"
       },
       "overload_trigger_delay": {
         "name": "Overload trigger delay"

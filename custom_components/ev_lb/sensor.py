@@ -34,6 +34,7 @@ async def async_setup_entry(
             EvLbLastActionReasonSensor(entry, coordinator),
             EvLbBalancerStateSensor(entry, coordinator),
             EvLbConfiguredFallbackSensor(entry, coordinator),
+            EvLbRampUpNextStepSensor(entry, coordinator),
             EvLbLastActionErrorSensor(entry, coordinator),
             EvLbLastActionTimestampSensor(entry, coordinator),
             EvLbLastActionStatusSensor(entry, coordinator),
@@ -288,6 +289,51 @@ class EvLbConfiguredFallbackSensor(RestoreSensor):
     def _handle_update(self) -> None:
         """Update sensor state from coordinator."""
         self._attr_native_value = self._coordinator.configured_fallback
+        self.async_write_ha_state()
+
+
+class EvLbRampUpNextStepSensor(RestoreSensor):
+    """Diagnostic sensor showing the size of the next ramp-up step (A).
+
+    Reports how many Amps the charging current will increase on the next
+    ramp-up step once the stability window elapses.  Non-zero only while
+    the balancer is in ``ramp_up_hold`` state (current below target and
+    headroom stability timer is running).  Returns 0 A when the charger
+    is already at its target current or when no ramp-up is pending.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "ramp_up_next_step"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
+    _attr_device_class = SensorDeviceClass.CURRENT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_value = 0.0
+
+    def __init__(
+        self, entry: ConfigEntry, coordinator: EvLoadBalancerCoordinator
+    ) -> None:
+        """Initialise the sensor."""
+        self._attr_unique_id = f"{entry.entry_id}_ramp_up_next_step"
+        self._attr_device_info = get_device_info(entry)
+        self._coordinator = coordinator
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to coordinator updates."""
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                self._coordinator.signal_update,
+                self._handle_update,
+            )
+        )
+        self._handle_update()
+
+    @callback
+    def _handle_update(self) -> None:
+        """Update sensor state from coordinator."""
+        self._attr_native_value = self._coordinator.ramp_up_next_step_a
         self.async_write_ha_state()
 
 

@@ -6,7 +6,7 @@ This guide explains what the integration does, what you can expect from it, what
 
 ## The short version
 
-The integration watches your home's power meter. When your total service power changes, it instantly recalculates how much current your EV charger can safely use without exceeding your service limit. If the load goes up, the charger current goes down — immediately. If the load goes down, the charger current goes back up — after a short cooldown to prevent oscillation.
+The integration watches your home's power meter. When your total service power changes, it instantly recalculates how much current your EV charger can safely use without exceeding your service limit. If the load goes up, the charger current goes down — immediately. If the load goes down, the charger current goes back up — in gradual steps, once headroom has been stably available for a configurable window, to prevent oscillation.
 
 That's it. It's a reactive, real-time load balancer for a single EV charger.
 
@@ -31,7 +31,7 @@ That's it. It's a reactive, real-time load balancer for a single EV charger.
 - **This assumes a single-phase electrical supply.** All Watt ↔ Amp conversions use `P = V × I`. Three-phase installations require workarounds — see [Single-phase assumption and multi-phase installations](#single-phase-assumption-and-multi-phase-installations).
 - **This does not manage time-of-use tariffs or solar surplus directly.** The integration exclusively handles load balancing — it reacts to total metered power to prevent exceeding your service limit. However, it works well **alongside** external automations that handle these concerns. See [Combining with solar surplus or time-of-use tariffs](#combining-with-solar-surplus-or-time-of-use-tariffs) below.
 - **Current adjustments are in 1 A steps.** The integration floors all current values to whole Amps. Sub-amp precision is not supported.
-- **Increases are delayed.** After any current reduction **or any drop in available headroom from a previously usable level**, there's a configurable cooldown (default: 30 s, adjustable via `number.*_ramp_up_time`) before the integration allows the current to increase again. This is intentional — it prevents rapid oscillation when service load fluctuates near the service limit.
+- **Increases are stepped and delayed.** After any current reduction, recovery is gradual: each step requires the computed headroom to be **continuously sufficient for a stability window** (default: **15 s**, adjustable via `number.*_ramp_up_time`) and only adds at most **`ramp_up_step_a`** Amps per step (default: **4 A**, adjustable via `number.*_ramp_up_step`). This is intentional — it prevents rapid oscillation when service load fluctuates near the service limit.
 
 ### Combining with solar surplus or time-of-use tariffs
 
@@ -154,6 +154,7 @@ All entities are grouped under a single device called **EV Charger Load Balancer
 | `sensor.*_last_action_status` | Diagnostic | Result of the most recent charger action call: `success` or `failure`. Useful for automations that react to charger communication health. |
 | `sensor.*_action_latency` | Measurement (ms) | Wall-clock time of the last charger action call in milliseconds, including any retries. Cross-reference with `sensor.*_retry_count` to distinguish slow actions from retried ones. |
 | `sensor.*_retry_count` | Measurement | Number of retries used by the last charger action call. `0` = first-try success; higher values indicate transient communication issues. |
+| `sensor.*_ramp_up_next_step` | Diagnostic (A) | How many Amps the charging current will rise on the next ramp-up step once the stability window elapses. Non-zero only while the balancer is in `ramp_up_hold` state (charger below target). Returns `0 A` when the charger is already at its target or no ramp-up is pending. |
 
 ### Binary sensors
 
@@ -170,7 +171,8 @@ All entities are grouped under a single device called **EV Charger Load Balancer
 |---|---|---|
 | `number.*_max_charger_current` | 0–80 A | The maximum current your charger can handle. The integration will never set a current higher than this. **Setting this to 0 A stops charging immediately** without running the load-balancing algorithm, and keeps it stopped until changed back to a non-zero value. Change it at runtime to temporarily limit or disable charging. |
 | `number.*_min_ev_current` | 1–32 A | The minimum current at which your charger can operate (IEC 61851 standard: 6 A for AC). If the computed target falls below this, charging stops entirely rather than running at an unsafe low current. |
-| `number.*_ramp_up_time` | 5–300 s | How many seconds the integration must wait after a current reduction (or any drop in available headroom from a previously usable level) before it allows the current to increase again. Lower values respond faster but risk oscillation on spiky loads. **Recommended: 20–30 s for most installations.** |
+| `number.*_ramp_up_time` | 5–300 s | How many seconds the computed headroom must remain continuously sufficient before the current is allowed to rise by one step. If headroom dips below the current commanded level the timer restarts from zero. Lower values react faster but risk oscillation on spiky loads. |
+| `number.*_ramp_up_step` | 1–32 A | Maximum current increase (in Amps) per stability window. After each stability window elapses, the current rises by at most this amount toward the computed target. Smaller values give more gradual recovery; larger values reach full current in fewer steps. |
 | `number.*_overload_trigger_delay` | 1–60 s | How long a continuous overload must persist before the correction loop starts. The default (2 s) absorbs most transient spikes (kettles, washing machine spin) without triggering unnecessary adjustments. |
 | `number.*_overload_loop_interval` | 1–60 s | How often the integration re-applies a correction while an overload persists. The default (5 s) ensures fast recovery even when the power meter does not report new values (e.g., meters that only send updates on value change). |
 
@@ -202,8 +204,7 @@ Every time your power meter reports a new value:
 3. **Apply safety rules:**
    - If target is below the minimum EV current → stop charging (instant)
    - If target is lower than current setting → reduce immediately (instant, no delay)
-   - If target is higher than current setting → increase only after the ramp-up cooldown period (default: 30 s, adjustable via `number.*_ramp_up_time`)
-   - **Cooldown timer also resets** whenever available headroom drops from a previously usable level (≥ `min_ev_current`) — even when the charger is already stopped — so conditions must be stable for a full cooldown period before a restart attempt
+   - If target is higher than current setting → increase only once headroom has been continuously sufficient for the stability window (default: **15 s**, adjustable via `number.*_ramp_up_time`); each step adds at most `number.*_ramp_up_step` Amps (default: **4 A**) toward the target
 
 ### Advanced details
 
@@ -257,8 +258,10 @@ flowchart TD
     D -- YES --> E(["stop_charging — instant"])
     D -- NO --> F{"target_a < current_a?<br/>load increased, must reduce"}
     F -- "YES — instant" --> G(["set_current(target_a)"])
-    F -- "NO — load decreased" --> H{"ramp-up cooldown elapsed?<br/>≥ ramp_up_time s since last<br/>reduction or headroom decrease"}
-    H -- "YES" --> I(["set_current(target_a)"])
+    F -- "NO — increase needed" --> RA{"ramp-up<br/>armed?"}
+    RA -- "NO (first start,<br/>no prior reduction)" --> K(["set_current(target_a)<br/>(direct — no stability window)"])
+    RA -- "YES (after any reduction<br/>or EV-start event)" --> H{"headroom stable for<br/>≥ ramp_up_time s?"}
+    H -- "YES — take one step" --> I(["set_current(min(current + step, target_a))"])
     H -- "NO" --> J(["hold current — wait for next cycle"])
 ```
 
@@ -266,14 +269,20 @@ flowchart TD
 
 **Reductions are always instant** because safety comes first — if your service load spikes, the charger current must drop immediately to avoid exceeding your service limit.
 
-**Increases are delayed by a configurable cooldown period** (default: 30 seconds, adjustable via `number.*_ramp_up_time`) after any reduction because service loads often fluctuate. Without this cooldown, the charger would rapidly oscillate between high and low current every few seconds when load hovers near the service limit. The cooldown gives transient loads (kettles, microwaves, washing machine spin cycles) time to settle before ramping back up.
+**Increases are delayed and stepped** after any reduction.  Each time the stability window elapses with sufficient headroom, the current is allowed to rise by at most the configured **ramp-up step size** (default 4 A, configurable via `number.*_ramp_up_step`).  This means:
 
-The **cooldown timer resets** whenever either of these happens:
-- The commanded current drops (direct reduction).
-- Available headroom decreases from a previously usable level (≥ `min_ev_current`) — even when the charger is already stopped at 0 A. This prevents a premature restart attempt if load conditions worsen again while the charger is waiting to resume.
-- **The EV starts charging** (status sensor transitions to `Charging`) while the charger is idling at `min_ev_current`. This prevents the current from jumping immediately to the full available headroom when the EV begins drawing; instead, the current increases gradually over the ramp-up period, just like after any other reduction.
+- After any reduction, the current increases by at most 4 A per stability window on the way back up.
+- A small reduction (e.g., 20 A → 18 A) recovers in one or two steps; a large reduction or full stop takes more steps but each step only waits for one stability window.
+- The stability window resets after every step, so each increment requires continuous stable headroom for the full window duration.
 
-> ⚠️ **Very low cooldown values (below ~10 s) risk instability** if your service load has frequent spikes or is unpredictable. The recommended minimum is 20–30 s for most installations.
+This approach avoids large current jumps that could cause a new overload immediately after recovery, without preventing recovery when there is genuine headroom available.
+
+The **stability timer resets** whenever either of these happens:
+- The commanded current drops (direct reduction) — the timer is cleared so recovery starts fresh.
+- A ramp-up step is taken — the timer resets so the next step also requires a full stability window of continuous headroom.
+- **The EV starts charging** (status sensor transitions to `Charging`) while the charger is idling at `min_ev_current`. This prevents the current from jumping immediately to the full available headroom when the EV begins drawing; instead, the current increases gradually, step by step, just like after any other reduction.
+
+> ⚠️ **Very low stability-window values (below ~10 s) risk instability** if your service load has frequent spikes or is unpredictable. The recommended minimum is 15–30 s for most installations.
 
 #### Built-in throttling and debounce
 
@@ -281,7 +290,8 @@ The integration includes several mechanisms that limit how often charger command
 
 | Mechanism | What it throttles | Default | Configurable via |
 |---|---|---|---|
-| **Ramp-up cooldown** | Current *increases* after any reduction or headroom drop | 30 s | `number.*_ramp_up_time` (5–300 s) |
+| **Ramp-up stability window** | Current *increases* after any reduction — each step requires headroom for this long | 15 s | `number.*_ramp_up_time` (5–300 s) |
+| **Ramp-up step size** | How many Amps the current rises per stability window | 4 A | `number.*_ramp_up_step` (1–32 A) |
 | **Overload trigger delay** | Overload corrections — transient spikes are absorbed | 2 s | `number.*_overload_trigger_delay` (1–60 s) |
 | **Overload loop interval** | Re-corrections while an overload persists | 5 s | `number.*_overload_loop_interval` (1–60 s) |
 | **Action coalescing** | Redundant charger commands — actions only fire when the target current actually changes (start, stop, or new value) | Always on | — |
@@ -294,13 +304,13 @@ Together, these ensure that even a noisy power meter producing many updates per 
 
 The defaults work well for most setups. If you need to adjust them, use the guidelines below. All three timing parameters are available as Number entities (`number.*_ramp_up_time`, `number.*_overload_trigger_delay`, `number.*_overload_loop_interval`) and can be changed at any time from the device page — see the [Number entities](#number-entities-adjustable-at-runtime) table above.
 
-| Installation scenario | Ramp-up cooldown | Overload trigger delay | Overload loop interval | Notes |
+| Installation scenario | Ramp-up window | Overload trigger delay | Overload loop interval | Notes |
 |---|---|---|---|---|
-| **Most homes** (MCB Type B/C, 10–20% margin below breaker rating) | 30 s (default) | 2 s (default) | 5 s (default) | Set `max_service_current` 2–4 A below the actual breaker rating for safety margin. |
-| **Tight margin** (`max_service_current` ≈ breaker rating, little headroom) | 20–30 s | 1 s | 3 s | Faster reaction compensates for the smaller safety buffer. |
-| **Slow-responding charger** (takes 5+ s to ramp) | 30–60 s | 2 s | 10–15 s | Avoids stacking commands that the charger cannot process in time. |
-| **Very spiky loads** (heat pumps, welders, large motors) | 45–60 s | 3–5 s | 5 s | Longer trigger delay prevents false overload triggers from inrush currents. |
-| **Stable loads, fast charger** (solar-only, no variable house loads) | 10–15 s | 1–2 s | 3–5 s | Lower cooldown allows quicker ramp-up when there are few transient spikes. |
+| **Most homes** (MCB Type B/C, 10–20% margin below breaker rating) | 15 s (default), step 4 A (default) | 2 s (default) | 5 s (default) | Set `max_service_current` 2–4 A below the actual breaker rating for safety margin. |
+| **Tight margin** (`max_service_current` ≈ breaker rating, little headroom) | 15–20 s, step 2–4 A | 1 s | 3 s | Faster reaction compensates for the smaller safety buffer; smaller step reduces overshoot risk. |
+| **Slow-responding charger** (takes 5+ s to ramp) | 20–30 s, step 4 A | 2 s | 10–15 s | Avoids stacking commands that the charger cannot process in time. |
+| **Very spiky loads** (heat pumps, welders, large motors) | 30–45 s, step 4 A | 3–5 s | 5 s | Longer stability window prevents false overload triggers from inrush currents. |
+| **Stable loads, fast charger** (solar-only, no variable house loads) | 10–15 s, step 6–8 A | 1–2 s | 3–5 s | Shorter window and larger step allows quicker ramp-up when there are few transient spikes. |
 
 **About breakers and RCDs:**
 - **MCBs (miniature circuit breakers)** have thermal trip times of minutes to hours for moderate overloads (1.13–1.45× rated current). The default 2 s trigger delay is well within safe thermal limits. Setting `max_service_current` below the MCB rating is the primary safety measure. Faster timing does not replace proper current limits, but it can improve system stability when operating close to those limits (e.g., tight-margin installations).
@@ -330,7 +340,7 @@ When a status sensor is configured:
 | `unavailable` / `unknown` | `current_set_a` (safe fallback — assume charging) | Up to full available headroom |
 | No sensor configured | `current_set_a` (original behaviour) | Up to full available headroom |
 
-> \*These values describe the **target** current. The actual commanded current may be temporarily lower (including 0 A) while the ramp-up cooldown logic is in effect.
+> \*These values describe the **target** current. The actual commanded current may be temporarily lower (including 0 A) while the ramp-up stability window is in effect.
 
 > **Safe-side default.** When the sensor is uncertain, the integration falls back to assuming the EV is charging. This may slightly over-subtract headroom (original behaviour), but it will never under-subtract, which could cause an overload.
 
@@ -340,7 +350,7 @@ When the status sensor reports the EV is **not** charging, the integration caps 
 
 - The charger is told to stay at the safe minimum current while the EV is idle, paused, or finished charging.
 - The available headroom calculation is **unaffected** — the `sensor.*_available_current` entity still shows the true headroom based on the non-EV load.
-- When the EV resumes charging (sensor transitions back to `Charging`), the current increases gradually from `min_ev_current` to the full available headroom via the ramp-up cooldown, rather than jumping immediately.
+- When the EV resumes charging (sensor transitions back to `Charging`), the current increases step-by-step from `min_ev_current` to the full available headroom via the ramp-up stability window, rather than jumping immediately.
 
 This avoids advertising unnecessarily high current to an idle charger, and provides a smooth, predictable ramp when the EV starts drawing.
 
@@ -348,17 +358,19 @@ This avoids advertising unnecessarily high current to an idle charger, and provi
 
 ### Ramp-up on EV start
 
-When the EV transitions from **not charging → charging** while the charger is already commanding a non-zero current (idling at `min_ev_current`), the ramp-up cooldown timer is reset. The current then increases from `min_ev_current` toward the full available headroom at the same rate as any other ramp-up:
+When the EV transitions from **not charging → charging** while the charger is already commanding a non-zero current (idling at `min_ev_current`), the ramp-up stability timer is armed. The current then increases from `min_ev_current` toward the full available headroom in steps, the same as any other ramp-up recovery:
 
 ```
 EV status → Charging           [t = 0]
-  ↓ cooldown reset
-Meter event at t = 5 s:        current = 6 A (held by cooldown)
-Meter event at t = 15 s:       current = 6 A (still held)
-Meter event at t = 31 s:       current = 22 A (cooldown elapsed — rises to full headroom)
+  ↓ stability window armed (timer starts on first meter event with sufficient headroom)
+Meter event at t = 5 s:        current = 6 A (stability window counting — 5/15 s)
+Meter event at t = 15 s:       current = 6 A (stability window counting — 15/15 s → step)
+Meter event at t = 16 s:       current = 10 A (first step taken: 6 + 4 A, window restarted)
+Meter event at t = 31 s:       current = 14 A (second step: 10 + 4 A)
+...and so on until target is reached
 ```
 
-When the charger was at **0 A** (stopped due to insufficient headroom or overload), no ramp-up trigger is set on the status change — the cooldown from the previous reduction already governs the gradual increase once headroom recovers.
+When the charger was at **0 A** (stopped due to insufficient headroom or overload), no ramp-up trigger is set on the status change — the stability window from the previous reduction already governs the gradual increase once headroom recovers.
 
 ---
 
@@ -396,7 +408,7 @@ sequenceDiagram
     C->>T: cancel trigger (if pending)
 ```
 
-**Why a trigger delay?** A sudden 2-second spike from a kettle or microwave would otherwise trigger an immediate correction and lock out current increases for the duration of the ramp-up cooldown. The trigger delay ignores transient spikes while still reacting to sustained overloads within a comfortable time.
+**Why a trigger delay?** A sudden 2-second spike from a kettle or microwave would otherwise trigger an immediate correction and lock out current increases for the duration of the ramp-up stability window. The trigger delay ignores transient spikes while still reacting to sustained overloads within a comfortable time.
 
 Both timing values are tunable at runtime via the Number entities `number.*_overload_trigger_delay` (default 2 s) and `number.*_overload_loop_interval` (default 5 s).
 
@@ -408,10 +420,10 @@ The `sensor.*_balancer_state` diagnostic sensor tracks what the integration is d
 
 | State | What it means | When you see it |
 |---|---|---|
-| `stopped` | Charger target is 0 A. | Overload, initial state, available current is below minimum, or max charger current is set to 0 A. |
+| `stopped` | Charger target is 0 A. | Overload, initial state, available current is below minimum, or max charger current is set to 0 A. Also shown while waiting for the stability window to elapse after a full stop (the timer counts internally but the state remains `stopped` until the first step fires). |
 | `active` | Charger is running at a steady current. | Normal operation — target hasn't changed since last cycle. |
 | `adjusting` | Charger current just changed this cycle. | Load shifted and the integration adjusted the current. |
-| `ramp_up_hold` | An increase is needed but the ramp-up cooldown hasn't elapsed yet. | Load dropped recently, headroom decreased from a usable level, or the EV just started drawing current after idling at `min_ev_current`, within the last `ramp_up_time` seconds. Only applies when the charger is actively running (current > 0). |
+| `ramp_up_hold` | An increase is needed but the stability window hasn't elapsed yet. | Headroom is sufficient but hasn't been stable for `ramp_up_time` seconds yet, or the EV just started drawing current after idling at `min_ev_current`. Only applies when the charger is actively running (current > 0). |
 | `disabled` | Load balancing switch is off. | User or automation turned off the switch. |
 
 ```mermaid
@@ -423,14 +435,16 @@ stateDiagram-v2
     state "DISABLED" as DISABLED
 
     [*] --> STOPPED
-    STOPPED --> ADJUSTING : headroom ≥ min_ev_current AND cooldown elapsed
+    STOPPED --> ADJUSTING : headroom ≥ min_ev_current AND no prior reduction (first start — direct)
+    STOPPED --> RAMP_UP_HOLD : after prior reduction — first step taken, more steps remain
+    STOPPED --> ADJUSTING : after prior reduction — first step reaches full target
     ADJUSTING --> ACTIVE : same target next cycle
     ADJUSTING --> STOPPED : overload (target < min_ev_current)
-    ADJUSTING --> RAMP_UP_HOLD : increase needed but cooldown active
+    ADJUSTING --> RAMP_UP_HOLD : increase needed but stability window active
     ACTIVE --> ADJUSTING : target changed
     ACTIVE --> STOPPED : overload
-    ACTIVE --> RAMP_UP_HOLD : increase needed but cooldown active
-    RAMP_UP_HOLD --> ADJUSTING : cooldown elapsed
+    ACTIVE --> RAMP_UP_HOLD : increase needed but stability window active
+    RAMP_UP_HOLD --> ADJUSTING : stability window elapsed
     RAMP_UP_HOLD --> STOPPED : overload
     DISABLED --> STOPPED : re-enabled (no headroom)
     DISABLED --> ADJUSTING : re-enabled (with headroom)
@@ -476,10 +490,10 @@ stateDiagram-v2
 | **Charging → Stopped** | Target drops below minimum (overload). `stop_charging` script is called. | Instant — no delay. |
 | **Charging → Idle** | Status sensor leaves `Charging`. Target is capped to `min_ev_current`. | Instant — it's a reduction. Status sensor only. |
 | **Idle → Stopped** | Headroom drops below `min_ev_current` while EV is not charging. `stop_charging` is called. | Instant — no delay. |
-| **Idle → Charging** | Status sensor transitions back to `Charging`. Ramp-up cooldown was reset on the EV-start event, so the current rises gradually from `min_ev_current` to the full available headroom. | Instant at `min_ev_current`, then increases after ramp-up cooldown. Status sensor only. |
-| **Stopped → Charging** | Headroom rises above minimum, EV is charging, ramp-up cooldown has elapsed. `start_charging` is called first, then `set_current`. | After cooldown. |
-| **Stopped → Idle** | Headroom rises above minimum but EV is not charging. Charger starts at `min_ev_current` (idle clamp applies). | After cooldown. Status sensor only. |
-| **Charging → Charging (different current)** | Target changed but still above minimum. `set_current` is called with the new target. | Reductions: instant. Increases: after cooldown. |
+| **Idle → Charging** | Status sensor transitions back to `Charging`. Ramp-up stability window was armed on the EV-start event, so the current rises step-by-step from `min_ev_current` to the full available headroom. | Instant at `min_ev_current`, then increases after each stability window. Status sensor only. |
+| **Stopped → Charging** | Headroom rises above minimum, EV is charging, stability window has elapsed. `start_charging` is called first, then `set_current`. | After stability window. |
+| **Stopped → Idle** | Headroom rises above minimum but EV is not charging. Charger starts at `min_ev_current` (idle clamp applies). | After stability window. Status sensor only. |
+| **Charging → Charging (different current)** | Target changed but still above minimum. `set_current` is called with the new target. | Reductions: instant. Increases: after stability window. |
 
 ---
 
@@ -570,7 +584,7 @@ sequenceDiagram
 ```
 
 1. Sensors restore their last known values (current set, available current, balancer state).
-2. Number entities restore runtime parameters (max charger current, min EV current, ramp-up cooldown).
+2. Number entities restore runtime parameters (max charger current, min EV current, ramp-up stability window, ramp-up step size).
 3. The switch restores its enabled/disabled state.
 4. The coordinator defers all meter health checks until **Home Assistant has fully started** (after `EVENT_HOMEASSISTANT_STARTED`). This ensures that dependent integrations — such as your energy monitor or smart meter — have had time to register their entities before the integration evaluates whether the power meter is available.
 5. Once HA is fully started: if the meter is unavailable, the configured fallback is applied immediately. If the meter is healthy, the integration waits for the first power-meter reading.

@@ -19,6 +19,7 @@ from custom_components.ev_lb.const import (
     CONF_MAX_SERVICE_CURRENT,
     CONF_POWER_METER_ENTITY,
     CONF_VOLTAGE,
+    DEFAULT_MIN_EV_CURRENT,
     DOMAIN,
     STATE_STOPPED,
 )
@@ -113,14 +114,20 @@ class TestOverloadWithSpikesAndRecovery:
         assert float(hass.states.get(current_set_id).state) == 0.0
         assert coordinator.available_current_a < 0
 
-        # Phase 5: Ramp-up expires (31 s from second spike at T=1028) → resume
-        # The second spike reset the cooldown: available dropped from 20 A (≥ min)
-        # to −3 A, so last_reduction_time = 1028.  Resume requires 31 s from there.
-        mock_time = 1059.0
+        # Phase 4.5: load immediately clears — starts stability timer at T=1029
+        mock_time = 1029.0
         hass.states.async_set(POWER_METER, meter_for_available(18.0, 0.0))
         await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == 0.0  # held, timer just started
 
-        assert float(hass.states.get(current_set_id).state) == 18.0
+        # Phase 5: Stability window expires (30 s from T=1029 timer start) → first step resume.
+        # The first step from 0 A reaches at least min_ev_current (6 A): the balancer
+        # ensures the first step never commands below the configured minimum.
+        mock_time = 1059.0  # 30 s after T=1029 timer start
+        hass.states.async_set(POWER_METER, meter_for_available(18.01, 0.0))  # distinct value → triggers event
+        await hass.async_block_till_done()
+
+        assert float(hass.states.get(current_set_id).state) >= DEFAULT_MIN_EV_CURRENT
         assert hass.states.get(active_id).state == "on"
         start_calls = [c for c in calls if c.data["entity_id"] == START_CHARGING_SCRIPT]
         assert len(start_calls) == 1
