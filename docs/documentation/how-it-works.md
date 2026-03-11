@@ -266,11 +266,18 @@ flowchart TD
 
 **Reductions are always instant** because safety comes first — if your service load spikes, the charger current must drop immediately to avoid exceeding your service limit.
 
-**Increases are delayed by a configurable cooldown period** (default: 30 seconds, adjustable via `number.*_ramp_up_time`) after any reduction because service loads often fluctuate. Without this cooldown, the charger would rapidly oscillate between high and low current every few seconds when load hovers near the service limit. The cooldown gives transient loads (kettles, microwaves, washing machine spin cycles) time to settle before ramping back up.
+**Increases are delayed and stepped** after any reduction.  The recovery uses the size of the reduction as the step size: each cooldown period the current is allowed to increase by at most the amount it was last reduced.  This means:
+
+- If the charger was reduced by 4 A (e.g., 20 A → 16 A), it increases by at most 4 A per cooldown period on the way back up.
+- If a subsequent reduction further drops the current, the new, larger step size takes over.
+- A large reduction (e.g., complete stop) typically recovers quickly because the step size equals the full reduction, so it reaches the target in one or two periods.
+
+This approach avoids large current jumps that could cause a new overload immediately after recovery, without preventing recovery when there is genuine headroom available.
 
 The **cooldown timer resets** whenever either of these happens:
-- The commanded current drops (direct reduction).
+- The commanded current drops (direct reduction) — the step size is also updated to match the reduction.
 - Available headroom drops **below** `min_ev_current` after being at or above it — i.e., conditions have deteriorated to the point where charging is no longer viable. Minor fluctuations that keep headroom above `min_ev_current` (e.g., 20 A → 19 A) do **not** reset the timer; only a drop into the insufficient zone does.
+- A partial ramp-up step is taken — the cooldown restarts so the next step also waits the full period.
 - **The EV starts charging** (status sensor transitions to `Charging`) while the charger is idling at `min_ev_current`. This prevents the current from jumping immediately to the full available headroom when the EV begins drawing; instead, the current increases gradually over the ramp-up period, just like after any other reduction.
 
 > ⚠️ **Very low cooldown values (below ~10 s) risk instability** if your service load has frequent spikes or is unpredictable. The recommended minimum is 20–30 s for most installations.

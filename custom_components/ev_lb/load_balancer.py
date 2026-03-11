@@ -257,6 +257,7 @@ def apply_ramp_up_limit(
     last_reduction_time: Optional[float],
     now: float,
     ramp_up_time_s: float,
+    step_a: float = 0.0,
 ) -> float:
     """Prevent increasing current before the ramp-up cooldown has elapsed.
 
@@ -265,6 +266,15 @@ def apply_ramp_up_limit(
     dynamic current reduction the app waits *ramp_up_time_s* seconds before
     allowing the target to rise again.  This avoids oscillation when household
     load fluctuates around the service limit.
+
+    When *step_a* is provided (> 0), each cooldown expiry allows the current to
+    increase by at most *step_a* toward *target_a* — a "false target" equal to
+    ``prev_a + step_a``.  This mirrors the reduction that triggered the cooldown:
+    if the load required cutting current by *step_a* amps, the recovery increases
+    by the same amount per period.  A new cooldown must be started by the caller
+    after each partial step (when the returned value is less than *target_a*).
+    When *step_a* is 0 (default), the full *target_a* is returned on the first
+    expiry — original one-shot behaviour.
 
     Args:
         prev_a:              Current charging current in Amps (last set value).
@@ -275,17 +285,24 @@ def apply_ramp_up_limit(
         now:                 Current monotonic timestamp in seconds.
         ramp_up_time_s:      Cooldown period in seconds before an increase is
                              allowed after a reduction.
+        step_a:              Maximum current increase per cooldown period in
+                             Amps.  When > 0, the returned value is at most
+                             ``prev_a + step_a`` (capped at *target_a*).
 
     Returns:
         *target_a* immediately when the target is lower than or equal to
         *prev_a* (instant reduction), or when no prior reduction has been
-        recorded, or when the cooldown has already elapsed.  Returns *prev_a*
-        (hold) only when the cooldown period has not yet elapsed.
+        recorded, or when the cooldown has already elapsed and no *step_a* is
+        set.  Returns *prev_a* (hold) when the cooldown period has not yet
+        elapsed.  Returns ``min(prev_a + step_a, target_a)`` when the cooldown
+        has elapsed and *step_a* > 0.
     """
     if target_a > prev_a and last_reduction_time is not None:
         elapsed = now - last_reduction_time
         if elapsed < ramp_up_time_s:
             return prev_a
+        if step_a > 0:
+            return min(prev_a + step_a, target_a)
     return target_a
 
 

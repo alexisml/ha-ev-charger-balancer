@@ -138,6 +138,7 @@ class EvLoadBalancerCoordinator:
 
         # Ramp-up cooldown tracking
         self._last_reduction_time: float | None = None
+        self._ramp_step_a: float = 0.0  # reduction amount used as step size for staged ramp-up
         self._time_fn = time.monotonic
 
         # Async sleep function — injectable for testing
@@ -711,7 +712,7 @@ class EvLoadBalancerCoordinator:
         if not self.ev_charging and target_a > self.min_ev_current:
             target_a = self.min_ev_current
 
-        # Apply ramp-up limit (instant down, delayed up)
+        # Apply ramp-up limit (instant down, delayed up with stepped recovery)
         now = self._time_fn()
         final_a = apply_ramp_up_limit(
             self.current_set_a,
@@ -719,6 +720,7 @@ class EvLoadBalancerCoordinator:
             self._last_reduction_time,
             now,
             self.ramp_up_time_s,
+            self._ramp_step_a,
         )
 
         # Track worsening conditions for ramp-up cooldown.  Restart the
@@ -740,7 +742,19 @@ class EvLoadBalancerCoordinator:
             and self.available_current_a >= self.min_ev_current
             and available_a < self.min_ev_current
         )
-        if final_a < self.current_set_a or headroom_worsened:
+        if final_a < self.current_set_a:
+            # Current was reduced — record the reduction amount as the step size
+            # for the next ramp-up.  This ensures recovery increases by at most
+            # the same delta that caused the reduction, preventing large current
+            # jumps when headroom suddenly recovers after a small reduction.
+            self._ramp_step_a = self.current_set_a - final_a
+            self._last_reduction_time = now
+        elif headroom_worsened:
+            self._last_reduction_time = now
+        elif self.current_set_a < final_a < target_a:
+            # A partial step was taken (cooldown expired but step_a limited the
+            # increase to below target_a).  Restart the cooldown so the next
+            # step also waits the full ramp_up_time_s before another increment.
             self._last_reduction_time = now
 
         _LOGGER.debug(
@@ -752,12 +766,21 @@ class EvLoadBalancerCoordinator:
             final_a,
         )
 
-        if final_a != target_a:
-            _LOGGER.debug(
-                "Ramp-up cooldown holding current at %.1f A (target %.1f A)",
-                final_a,
-                target_a,
-            )
+        if final_a < target_a:
+            if final_a > self.current_set_a:
+                _LOGGER.debug(
+                    "Ramp-up step: %.1f A → %.1f A (target %.1f A, step %.1f A)",
+                    self.current_set_a,
+                    final_a,
+                    target_a,
+                    self._ramp_step_a,
+                )
+            else:
+                _LOGGER.debug(
+                    "Ramp-up cooldown holding current at %.1f A (target %.1f A)",
+                    final_a,
+                    target_a,
+                )
 
         # Determine balancer operational state
         ramp_up_held = final_a < target_a

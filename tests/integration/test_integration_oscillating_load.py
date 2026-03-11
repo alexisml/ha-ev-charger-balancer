@@ -90,13 +90,26 @@ class TestTransientLoadSpike:
         assert float(hass.states.get(current_set_id).state) == 10.0
         assert hass.states.get(state_id).state == STATE_RAMP_UP_HOLD
 
-        # Phase 5: Cooldown expires at 31 s → increase allowed
+        # Phase 5: Cooldown expires at 31 s → first ramp-up step taken
+        # Charger steps from 10 A by the reduction amount (8 A) → 18 A.
+        # This is still below the available headroom (25 A), so the balancer
+        # restarts the cooldown for the next step → STATE_RAMP_UP_HOLD.
         mock_time = 1041.0  # 31 s after T=1010
         hass.states.async_set(POWER_METER, meter_for_available(25.02, 10.0))
         await hass.async_block_till_done()
 
+        step1_current = float(hass.states.get(current_set_id).state)
+        assert step1_current > 10.0  # Increased after cooldown
+        assert hass.states.get(state_id).state == STATE_RAMP_UP_HOLD  # more steps remain
+
+        # Phase 6: Second step cooldown expires → charger reaches full available headroom
+        # elapsed = 31 s from T=1041; current=18 A; step+18=26 A → capped at 25 A
+        mock_time = 1072.0  # 31 s after T=1041
+        hass.states.async_set(POWER_METER, meter_for_available(25.03, step1_current))
+        await hass.async_block_till_done()
+
         final_current = float(hass.states.get(current_set_id).state)
-        assert final_current > 10.0  # Increased after cooldown
+        assert final_current > step1_current  # Second step taken
         assert hass.states.get(state_id).state == STATE_ADJUSTING
 
     async def test_two_consecutive_spikes_each_reset_ramp_up_timer(
@@ -150,14 +163,18 @@ class TestTransientLoadSpike:
         assert float(hass.states.get(current_set_id).state) == 10.0
         assert hass.states.get(state_id).state == STATE_RAMP_UP_HOLD  # timer reset to T=1038
 
-        # Phase 6: At T=1069 (31 s from second spike) → now allowed
+        # Phase 6: At T=1069 (31 s from second spike) → first ramp-up step taken
+        # After two consecutive spikes the charger begins stepping up only after the
+        # full cooldown period from the most recent spike, demonstrating that each
+        # spike properly resets the recovery timer.  The first step takes current
+        # from 10 A to 14 A (the second reduction amount); more steps follow.
         mock_time = 1069.0
         hass.states.async_set(POWER_METER, meter_for_available(25.01, 10.0))
         await hass.async_block_till_done()
 
         final_current = float(hass.states.get(current_set_id).state)
         assert final_current > 10.0
-        assert hass.states.get(state_id).state == STATE_ADJUSTING
+        assert hass.states.get(state_id).state == STATE_RAMP_UP_HOLD  # first step taken, more remain
 
 
 # ---------------------------------------------------------------------------
@@ -237,14 +254,17 @@ class TestOscillatingLoad:
         assert float(hass.states.get(current_set_id).state) == 14.0
         assert hass.states.get(state_id).state == STATE_RAMP_UP_HOLD
 
-        # Phase 6: Load stays low for 31 s from last reduction (T=1025+31=T=1056) → allowed
+        # Phase 6: Load stays low for 31 s from last reduction (T=1025+31=T=1056) → first step taken
+        # The charger current increases incrementally after the cooldown expires,
+        # remaining in ramp_up_hold state until the full recovery completes.
+        # The first step here goes from 14 A to 17 A (second reduction amount = 3 A).
         mock_time = 1056.0
         hass.states.async_set(POWER_METER, meter_for_available(24.01, 14.0))
         await hass.async_block_till_done()
 
         final = float(hass.states.get(current_set_id).state)
         assert final > 14.0
-        assert hass.states.get(state_id).state == STATE_ADJUSTING
+        assert hass.states.get(state_id).state == STATE_RAMP_UP_HOLD  # first step taken, more remain
 
     async def test_oscillation_never_stops_if_always_above_min_ev(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
