@@ -80,6 +80,9 @@
       "configured_fallback": {
         "name": "Respaldo de medidor configurado"
       },
+      "ramp_up_next_step": {
+        "name": "Próximo paso de subida de corriente"
+      },
       "last_action_error": {
         "name": "Último error de acción"
       },
@@ -118,7 +121,10 @@
         "name": "Corriente mínima del VE"
       },
       "ramp_up_time": {
-        "name": "Retardo de subida de corriente"
+        "name": "Ventana de estabilidad para subida de corriente"
+      },
+      "ramp_up_step": {
+        "name": "Tamaño de paso de subida de corriente"
       },
       "overload_trigger_delay": {
         "name": "Retardo de activación por sobrecarga"

@@ -45,6 +45,7 @@ from .const import (
     DEFAULT_MIN_EV_CURRENT,
     DEFAULT_OVERLOAD_LOOP_INTERVAL,
     DEFAULT_OVERLOAD_TRIGGER_DELAY,
+    DEFAULT_RAMP_UP_STEP,
     DEFAULT_RAMP_UP_TIME,
     DEFAULT_UNAVAILABLE_BEHAVIOR,
     DEFAULT_UNAVAILABLE_FALLBACK_CURRENT,
@@ -115,6 +116,7 @@ class EvLoadBalancerCoordinator:
         self.min_ev_current: float = DEFAULT_MIN_EV_CURRENT
         self.enabled: bool = True
         self.ramp_up_time_s: float = DEFAULT_RAMP_UP_TIME
+        self.ramp_up_step_a: float = DEFAULT_RAMP_UP_STEP
         self.overload_trigger_delay_s: float = DEFAULT_OVERLOAD_TRIGGER_DELAY
         self.overload_loop_interval_s: float = DEFAULT_OVERLOAD_LOOP_INTERVAL
 
@@ -136,9 +138,15 @@ class EvLoadBalancerCoordinator:
         self.action_latency_ms: float | None = None
         self.retry_count: int | None = None
 
-        # Ramp-up cooldown tracking
-        self._last_reduction_time: float | None = None
-        self._ramp_step_a: float = 0.0  # reduction amount used as step size for staged ramp-up
+        # Ramp-up stability tracking: timestamp (monotonic) when headroom first became
+        # sufficient for the next step; None when not currently tracking.
+        # _ramp_up_armed is False on initial start: the stability window is only
+        # enforced after the first reduction or EV-start event, preserving the
+        # original behaviour of charging immediately on first start.
+        self._ramp_up_armed: bool = False
+        self._headroom_stable_since: float | None = None
+        # Diagnostic: actual step size that will be applied on the next ramp-up step (A)
+        self.ramp_up_next_step_a: float = 0.0
         self._time_fn = time.monotonic
 
         # Async sleep function — injectable for testing
@@ -389,11 +397,14 @@ class EvLoadBalancerCoordinator:
             ):
                 # EV just started charging (explicit Charging state, not a glitch to
                 # unknown/unavailable) while the charger was at idle current.
-                # Trigger ramp-up on the next recompute so the current rises
-                # gradually from min_ev_current rather than jumping immediately.
-                self._last_reduction_time = self._time_fn()
+                # Arm the stability window and reset the timer so the first
+                # power-meter event after the EV starts drawing current begins a
+                # fresh stability window — the current rises gradually from
+                # min_ev_current rather than jumping immediately to full headroom.
+                self._ramp_up_armed = True
+                self._headroom_stable_since = None
                 _LOGGER.debug(
-                    "EV started charging — ramp-up cooldown reset to hold at min_ev_current",
+                    "EV started charging — ramp-up stability timer reset to hold at min_ev_current",
                 )
             self.ev_charging = new_ev_charging
             _LOGGER.debug(
@@ -712,50 +723,47 @@ class EvLoadBalancerCoordinator:
         if not self.ev_charging and target_a > self.min_ev_current:
             target_a = self.min_ev_current
 
-        # Apply ramp-up limit (instant down, delayed up with stepped recovery)
+        # Apply stability-based ramp-up (instant down, stepped up after stable headroom).
+        # effective_step caps at max_charger_current and ensures the first step from 0
+        # (or any level below min_ev_current) reaches at least min_ev_current so the
+        # charger always starts at a viable current rather than an intermediate value
+        # below the configured minimum.
+        #
+        # _ramp_up_armed gates the stability check: on initial start (no prior
+        # reduction) the charger jumps directly to the full target, preserving the
+        # original safe-start behaviour.  Only after a reduction or EV-start event
+        # is _ramp_up_armed set to True and the stability window enforced.
         now = self._time_fn()
-        final_a = apply_ramp_up_limit(
-            self.current_set_a,
-            target_a,
-            self._last_reduction_time,
-            now,
-            self.ramp_up_time_s,
-            self._ramp_step_a,
-        )
+        effective_step = min(self.ramp_up_step_a, self.max_charger_current)
+        if (
+            effective_step > 0
+            and self.current_set_a < self.min_ev_current
+            and target_a >= self.min_ev_current
+        ):
+            effective_step = max(effective_step, self.min_ev_current - self.current_set_a)
 
-        # Track worsening conditions for ramp-up cooldown.  Restart the
-        # cooldown whenever the commanded current drops OR whenever available
-        # headroom falls from a previously usable level (≥ min) to below the
-        # minimum needed to charge (< min).  This catches the case where the
-        # charger is already stopped (current = 0) but the available headroom
-        # shrinks back below the minimum — a sign that conditions are still
-        # too bad to restart and the balancer should wait another full cooldown
-        # period before attempting to resume.
-        # Deliberately excludes minor fluctuations that stay above min_ev_current
-        # (e.g., 20 A → 19.5 A) to avoid continuously extending the cooldown
-        # while load naturally oscillates at a level that could support charging.
-        # Note: self.available_current_a is always a float (initialised to 0.0)
-        # so no None-guard is needed; on the first call available_a >= 0 >=
-        # self.available_current_a, making headroom_worsened False by default.
-        headroom_worsened = (
-            available_a < self.available_current_a
-            and self.available_current_a >= self.min_ev_current
-            and available_a < self.min_ev_current
-        )
+        if self._ramp_up_armed:
+            final_a, self._headroom_stable_since = apply_ramp_up_limit(
+                self.current_set_a,
+                target_a,
+                self._headroom_stable_since,
+                now,
+                self.ramp_up_time_s,
+                effective_step,
+            )
+        else:
+            final_a = target_a
+            self._headroom_stable_since = None
+
+        # Arm the ramp-up mechanism the first time the current is reduced so all
+        # subsequent increases require a full stability window.
         if final_a < self.current_set_a:
-            # Current was reduced — record the reduction amount as the step size
-            # for the next ramp-up.  This ensures recovery increases by at most
-            # the same delta that caused the reduction, preventing large current
-            # jumps when headroom suddenly recovers after a small reduction.
-            self._ramp_step_a = self.current_set_a - final_a
-            self._last_reduction_time = now
-        elif headroom_worsened:
-            self._last_reduction_time = now
-        elif self.current_set_a < final_a < target_a:
-            # A partial step was taken (cooldown expired but step_a limited the
-            # increase to below target_a).  Restart the cooldown so the next
-            # step also waits the full ramp_up_time_s before another increment.
-            self._last_reduction_time = now
+            self._ramp_up_armed = True
+            self._headroom_stable_since = None
+
+        # Determine balancer operational state and the next expected step size
+        ramp_up_held = final_a < target_a
+        self.ramp_up_next_step_a = round(min(effective_step, target_a - final_a), 2) if ramp_up_held else 0.0
 
         _LOGGER.debug(
             "Recompute (%s): service=%.0f W, available=%.1f A, target=%.1f A, final=%.1f A",
@@ -773,17 +781,17 @@ class EvLoadBalancerCoordinator:
                     self.current_set_a,
                     final_a,
                     target_a,
-                    self._ramp_step_a,
+                    effective_step,
                 )
             else:
                 _LOGGER.debug(
-                    "Ramp-up cooldown holding current at %.1f A (target %.1f A)",
+                    "Ramp-up holding at %.1f A — waiting for %.0f s of stable headroom "
+                    "(target %.1f A, next step %.1f A)",
                     final_a,
+                    self.ramp_up_time_s,
                     target_a,
+                    self.ramp_up_next_step_a,
                 )
-
-        # Determine balancer operational state
-        ramp_up_held = final_a < target_a
 
         # Update computed state and execute actions
         self._update_and_notify(round(available_a, 2), final_a, reason, ramp_up_held)
