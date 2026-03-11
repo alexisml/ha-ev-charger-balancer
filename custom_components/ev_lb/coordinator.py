@@ -724,17 +724,18 @@ class EvLoadBalancerCoordinator:
             target_a = self.min_ev_current
 
         # Apply stability-based ramp-up (instant down, stepped up after stable headroom).
-        # effective_step caps at max_charger_current and ensures the first step from 0
-        # (or any level below min_ev_current) reaches at least min_ev_current so the
-        # charger always starts at a viable current rather than an intermediate value
-        # below the configured minimum.
+        # effective_step is the configured step size, capped so it cannot exceed the
+        # remaining gap to target_a (apply_ramp_up_limit also enforces this cap, but
+        # computing it here keeps the ramp_up_next_step_a diagnostic accurate).
+        # For the very first step from 0 (or below min_ev_current), the step is raised
+        # to at least min_ev_current so the charger always starts at a viable current.
         #
         # _ramp_up_armed gates the stability check: on initial start (no prior
         # reduction) the charger jumps directly to the full target, preserving the
         # original safe-start behaviour.  Only after a reduction or EV-start event
         # is _ramp_up_armed set to True and the stability window enforced.
         now = self._time_fn()
-        effective_step = min(self.ramp_up_step_a, self.max_charger_current)
+        effective_step = self.ramp_up_step_a
         if (
             effective_step > 0
             and self.current_set_a < self.min_ev_current

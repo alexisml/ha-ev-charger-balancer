@@ -145,9 +145,9 @@ class TestNormalDailyOperation:
         assert hass.states.get(active_id).state == "off"
         assert len(calls) == 0  # No actions while held
 
-        # --- Phase 6: Cooldown expires → charger resumes ---
+        # --- Phase 6: Stability window expires → charger resumes ---
         calls.clear()
-        mock_time = 1051.0  # 31s after reduction at t=1020 (> 30s cooldown)
+        mock_time = 1056.0  # 31 s after timer start at T=1025 (Phase 5 first good event)
         hass.states.async_set(POWER_METER, "3001")
         await hass.async_block_till_done()
 
@@ -216,8 +216,8 @@ class TestRampUpCooldownFullCycle:
         assert float(hass.states.get(current_set_id).state) == reduced_value  # Held
         assert hass.states.get(state_id).state == STATE_RAMP_UP_HOLD
 
-        # Phase 4: Cooldown expires → increase allowed → adjusting
-        mock_time = 1032.0  # 31s after reduction (> 30s)
+        # Phase 4: Stability window expires → increase allowed → adjusting
+        mock_time = 1041.0  # 31 s after timer start at Phase 3 (T=1010)
         hass.states.async_set(POWER_METER, "3003")
         await hass.async_block_till_done()
 
@@ -366,14 +366,20 @@ class TestRampUpCustomTiming:
         reduced = float(hass.states.get(current_set_id).state)
         assert reduced < 18.0
 
-        # Phase 3: Load drops at t=2060 (59s after reduction) → still within 60s → held
+        # Phase 2.5: Load immediately drops — starts the stability timer at T=2002
+        mock_time = 2002.0
+        hass.states.async_set(POWER_METER, "3004")  # distinct value to trigger state change
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == reduced  # held, timer started
+
+        # Phase 3: Load drops at t=2060 (58 s after timer start T=2002) → still within 60 s → held
         mock_time = 2060.0
         hass.states.async_set(POWER_METER, "3001")
         await hass.async_block_till_done()
 
         assert float(hass.states.get(current_set_id).state) == reduced  # Still held
 
-        # Phase 4: At t=2062 (61s after reduction) → past 60s cooldown → increase allowed
+        # Phase 4: At t=2062 (60 s after timer start T=2002) → past 60 s → increase allowed
         mock_time = 2062.0
         hass.states.async_set(POWER_METER, "3002")
         await hass.async_block_till_done()

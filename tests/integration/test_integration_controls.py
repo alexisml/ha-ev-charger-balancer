@@ -54,6 +54,7 @@ class TestParameterChangesDuringCharging:
         await setup_integration(hass, mock_config_entry_with_actions)
         coordinator = mock_config_entry_with_actions.runtime_data
         coordinator.ramp_up_time_s = 0.0  # Disable cooldown for clean transitions
+        coordinator.ramp_up_step_a = 32.0  # Large step: jump directly to target
 
         current_set_id = get_entity_id(hass, mock_config_entry_with_actions, "sensor", "current_set")
         active_id = get_entity_id(hass, mock_config_entry_with_actions, "binary_sensor", "active")

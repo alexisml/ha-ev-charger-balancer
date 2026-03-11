@@ -89,6 +89,7 @@ class TestFullChargingTimelapse:
         coordinator = entry.runtime_data
         coordinator.ramp_up_time_s = 30.0
         coordinator.max_charger_current = 16.0
+        coordinator.ramp_up_step_a = 32.0  # large step: each window = one full jump to target
 
         mock_time = 1000.0
 
@@ -151,13 +152,22 @@ class TestFullChargingTimelapse:
         assert coordinator.available_current_a < 0
 
         # -------------------------------------------------------------------
-        # Phase 5 (step 8): Load eases enough for 8 A, but ramp-up cooldown active
-        # target = 8 A, elapsed = 20 s < 30 s → HOLD at 0 A
+        # Phase 4.5: load clears immediately after Phase 4 — starts stability
+        # timer at T=1026.  With ramp_up_step_a=32, the first step = full target.
+        # -------------------------------------------------------------------
+        mock_time = 1026.0
+        hass.states.async_set(POWER_METER, meter_for_available(8.0, 0.0))
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == 0.0  # held — timer just started
+
+        # -------------------------------------------------------------------
+        # Phase 5 (step 8): Load eases enough for 8 A, but stability window active
+        # target = 8 A, elapsed = 14 s < 30 s → HOLD at 0 A
         # Since charger is at 0 A (not running), balancer_state = "stopped"
         # (ramp_up_hold only shows when charger is actively running and an
         # *increase* is blocked; here the charger is already stopped)
         # -------------------------------------------------------------------
-        mock_time = 1040.0  # 20 s since last reduction at T=1020
+        mock_time = 1040.0  # 14 s since timer start at T=1026
         hass.states.async_set(POWER_METER, meter_for_available(8.0, 0.0))
         await hass.async_block_till_done()
 
@@ -166,11 +176,11 @@ class TestFullChargingTimelapse:
         assert hass.states.get(state_id).state == STATE_STOPPED
 
         # -------------------------------------------------------------------
-        # Phase 6 (step 9): Ramp-up cooldown expires → charging resumes
-        # elapsed = 31 s > 30 s → increase allowed → 8 A
+        # Phase 6 (step 9): Stability window expires → charging resumes
+        # elapsed = 30 s since T=1026 timer start → step allowed
         # Slightly different meter (8.01 A) to trigger a new event
         # -------------------------------------------------------------------
-        mock_time = 1051.0  # 31 s since T=1020 — cooldown cleared
+        mock_time = 1056.0  # 30 s after timer start at T=1026
         hass.states.async_set(POWER_METER, meter_for_available(8.01, 0.0))
         await hass.async_block_till_done()
 
@@ -180,12 +190,20 @@ class TestFullChargingTimelapse:
         assert hass.states.get(state_id).state == STATE_ADJUSTING
 
         # -------------------------------------------------------------------
+        # Phase 6.5: Start next stability window for Phase 7
+        # -------------------------------------------------------------------
+        mock_time = 1057.0
+        hass.states.async_set(POWER_METER, meter_for_available(24.0, resumed))
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == resumed  # held, timer started
+
+        # -------------------------------------------------------------------
         # Phase 7 (step 10): Load drops — charger increases to max
         # available = 24 A → target = 16 A (cap at max_charger)
-        # elapsed still > 30 s from T=1020 → increase allowed
+        # elapsed = 30 s since T=1057 → step allowed (step=32 → full target)
         # -------------------------------------------------------------------
-        mock_time = 1060.0
-        hass.states.async_set(POWER_METER, meter_for_available(24.0, resumed))
+        mock_time = 1087.0  # 30 s after Phase 6.5 timer start
+        hass.states.async_set(POWER_METER, meter_for_available(24.01, resumed))  # distinct value → triggers event
         await hass.async_block_till_done()
 
         assert float(hass.states.get(current_set_id).state) == 16.0
@@ -193,9 +211,8 @@ class TestFullChargingTimelapse:
 
         # -------------------------------------------------------------------
         # Phase 8 (step 11): Secondary spike — available = 14 A → reduce to 14 A
-        # Records new last_reduction_time = T=1070
         # -------------------------------------------------------------------
-        mock_time = 1070.0
+        mock_time = 1097.0
         hass.states.async_set(POWER_METER, meter_for_available(14.0, 16.0))
         await hass.async_block_till_done()
 
@@ -203,13 +220,21 @@ class TestFullChargingTimelapse:
         assert hass.states.get(state_id).state == STATE_ADJUSTING
 
         # -------------------------------------------------------------------
-        # Phase 9 (step 12a): Load eases — target = 16 A (max), but new cooldown
+        # Phase 8.5: Start stability timer after secondary spike
+        # -------------------------------------------------------------------
+        mock_time = 1098.0
+        hass.states.async_set(POWER_METER, meter_for_available(24.0, 14.0))
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == 14.0  # held, timer started
+
+        # -------------------------------------------------------------------
+        # Phase 9 (step 12a): Load eases — target = 16 A (max), but stability window active
         # Charger is RUNNING at 14 A (active=True) and an *increase* is blocked
         # → balancer_state = "ramp_up_hold"
-        # elapsed = 5 s < 30 s since T=1070
+        # elapsed = 5 s < 30 s since T=1098
         # -------------------------------------------------------------------
-        mock_time = 1075.0
-        hass.states.async_set(POWER_METER, meter_for_available(24.0, 14.0))
+        mock_time = 1103.0
+        hass.states.async_set(POWER_METER, meter_for_available(24.01, 14.0))  # distinct value
         await hass.async_block_till_done()
 
         assert float(hass.states.get(current_set_id).state) == 14.0  # held
@@ -217,11 +242,11 @@ class TestFullChargingTimelapse:
         assert hass.states.get(state_id).state == STATE_RAMP_UP_HOLD  # running but blocked
 
         # -------------------------------------------------------------------
-        # Phase 10 (step 12b): Second ramp-up expires → charger at max
-        # elapsed = 31 s > 30 s since T=1070
+        # Phase 10 (step 12b): Stability window expires → charger at max
+        # elapsed = 31 s since T=1098 → step (step=32 → full target 16 A)
         # -------------------------------------------------------------------
-        mock_time = 1101.0
-        hass.states.async_set(POWER_METER, meter_for_available(24.01, 14.0))
+        mock_time = 1129.0
+        hass.states.async_set(POWER_METER, meter_for_available(24.02, 14.0))  # distinct value
         await hass.async_block_till_done()
 
         assert float(hass.states.get(current_set_id).state) == 16.0
@@ -292,6 +317,7 @@ class TestChargingTimelapseWithIsChargingSensor:
         coordinator = entry.runtime_data
         coordinator.ramp_up_time_s = 60.0
         coordinator.max_charger_current = 16.0
+        coordinator.ramp_up_step_a = 32.0  # large step: each window = one full jump to target
 
         mock_time = 1000.0
 
@@ -411,11 +437,11 @@ class TestChargingTimelapseWithIsChargingSensor:
 
         # -------------------------------------------------------------------
         # Step 8: Ramp-up expires → charging resumes at min_ev_current (6 A)
-        # elapsed = 1116 - 1055 = 61 s > 60 s → increase allowed
+        # elapsed = 61 s since T=1065 timer start (headroom first appeared after Step 6) → allowed
         # available = 9 A > min 6 A; sensor=Available → capped at min_ev_current = 6 A
         # (not 9 A — the "not charging" cap limits the commanded current to 6 A)
         # -------------------------------------------------------------------
-        mock_time = 1116.0
+        mock_time = 1126.0  # 61 s after timer start at T=1065
         hass.states.async_set(POWER_METER, meter_for_available(9.01, 0.0))
         await hass.async_block_till_done()
 
@@ -425,12 +451,12 @@ class TestChargingTimelapseWithIsChargingSensor:
 
         # -------------------------------------------------------------------
         # Step 9: EV acknowledges the current and starts drawing →
-        # sensor transitions to Charging.  The coordinator resets the ramp-up
-        # cooldown at this moment (T=1120) so the current is held at 6 A on
+        # sensor transitions to Charging.  The coordinator arms the ramp-up
+        # stability window at this moment (T=1130) so the current is held at 6 A on
         # the first recompute, preventing an immediate jump to full headroom.
         # elapsed = 0 s < 60 s → ramp-up holds at 6 A
         # -------------------------------------------------------------------
-        mock_time = 1120.0
+        mock_time = 1130.0
         hass.states.async_set(status_entity, "Charging")
         hass.states.async_set(POWER_METER, meter_w(2.0, DEFAULT_MIN_EV_CURRENT))  # EV drawing 6 A
         await hass.async_block_till_done()
@@ -440,13 +466,13 @@ class TestChargingTimelapseWithIsChargingSensor:
         assert hass.states.get(active_id).state == "on"
 
         # -------------------------------------------------------------------
-        # Step 10: Ramp-up cooldown elapses after EV started charging →
+        # Step 10: Stability window elapses after EV started charging →
         # current rises toward full headroom.
-        # elapsed = 1181 - 1120 = 61 s > 60 s → increase allowed
+        # elapsed = 61 s since T=1130 timer start → increase allowed
         # house=2A, EV=6A → meter slightly different to trigger a new state event
         # ev_estimate=6A, non_ev=2A, available=30A → capped at max_charger=16A
         # -------------------------------------------------------------------
-        mock_time = 1181.0
+        mock_time = 1191.0  # 61 s after T=1130 timer start
         hass.states.async_set(POWER_METER, meter_w(2.01, DEFAULT_MIN_EV_CURRENT))  # slightly different → new event
         await hass.async_block_till_done()
 

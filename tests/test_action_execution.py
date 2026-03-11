@@ -222,8 +222,13 @@ class TestResumeChargingActions:
 
         calls.clear()
 
-        # Step 3: load drops and cooldown has elapsed → resume
-        mock_time = 1032.0  # 31 s after reduction (> 30 s cooldown)
+        # Step 2.5: load immediately drops — starts the stability timer at T=1002
+        mock_time = 1002.0
+        hass.states.async_set(POWER_METER, "5001")
+        await hass.async_block_till_done()
+
+        # Step 3: load drops and stability window elapsed → resume
+        mock_time = 1032.0  # 30 s after timer start at T=1002
         hass.states.async_set(POWER_METER, "5000")
         await hass.async_block_till_done()
 

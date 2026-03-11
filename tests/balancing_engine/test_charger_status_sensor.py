@@ -878,10 +878,16 @@ class TestChargingStartRampUp:
         hass.states.async_set(self.STATUS_ENTITY, "Charging")
         await hass.async_block_till_done()
 
-        # Step 3: Meter event after cooldown has elapsed (t=1032, 31 s > 30 s)
+        # Step 2.5: meter fires right after EV-start — begins the stability timer
+        set_time(1002.0)
+        hass.states.async_set(POWER_METER, "319")
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == DEFAULT_MIN_EV_CURRENT  # held
+
+        # Step 3: Meter event after stability window has elapsed (t=1032, 30 s from T=1002)
         # Now current should be allowed to rise above min_ev_current.
         set_time(1032.0)
-        hass.states.async_set(POWER_METER, "319")
+        hass.states.async_set(POWER_METER, "320")
         await hass.async_block_till_done()
 
         assert float(hass.states.get(current_set_id).state) > DEFAULT_MIN_EV_CURRENT

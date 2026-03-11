@@ -257,8 +257,8 @@ flowchart TD
     D -- YES --> E(["stop_charging — instant"])
     D -- NO --> F{"target_a < current_a?<br/>load increased, must reduce"}
     F -- "YES — instant" --> G(["set_current(target_a)"])
-    F -- "NO — load decreased" --> H{"ramp-up cooldown elapsed?<br/>≥ ramp_up_time s since last<br/>reduction or headroom decrease"}
-    H -- "YES" --> I(["set_current(target_a)"])
+    F -- "NO — load decreased" --> H{"headroom stable for<br/>≥ ramp_up_time s?"}
+    H -- "YES — take one step" --> I(["set_current(min(current + step, target_a))"])
     H -- "NO" --> J(["hold current — wait for next cycle"])
 ```
 
@@ -266,21 +266,20 @@ flowchart TD
 
 **Reductions are always instant** because safety comes first — if your service load spikes, the charger current must drop immediately to avoid exceeding your service limit.
 
-**Increases are delayed and stepped** after any reduction.  The recovery uses the size of the reduction as the step size: each cooldown period the current is allowed to increase by at most the amount it was last reduced.  This means:
+**Increases are delayed and stepped** after any reduction.  Each time the stability window elapses with sufficient headroom, the current is allowed to rise by at most the configured **ramp-up step size** (default 4 A, configurable via `number.*_ramp_up_step`).  This means:
 
-- If the charger was reduced by 4 A (e.g., 20 A → 16 A), it increases by at most 4 A per cooldown period on the way back up.
-- If a subsequent reduction further drops the current, the new, larger step size takes over.
-- A large reduction (e.g., complete stop) typically recovers quickly because the step size equals the full reduction, so it reaches the target in one or two periods.
+- After any reduction, the current increases by at most 4 A per stability window on the way back up.
+- A small reduction (e.g., 20 A → 18 A) recovers in one or two steps; a large reduction or full stop takes more steps but each step only waits for one stability window.
+- The stability window resets after every step, so each increment requires continuous stable headroom for the full window duration.
 
 This approach avoids large current jumps that could cause a new overload immediately after recovery, without preventing recovery when there is genuine headroom available.
 
-The **cooldown timer resets** whenever either of these happens:
-- The commanded current drops (direct reduction) — the step size is also updated to match the reduction.
-- Available headroom drops **below** `min_ev_current` after being at or above it — i.e., conditions have deteriorated to the point where charging is no longer viable. Minor fluctuations that keep headroom above `min_ev_current` (e.g., 20 A → 19 A) do **not** reset the timer; only a drop into the insufficient zone does.
-- A partial ramp-up step is taken — the cooldown restarts so the next step also waits the full period.
-- **The EV starts charging** (status sensor transitions to `Charging`) while the charger is idling at `min_ev_current`. This prevents the current from jumping immediately to the full available headroom when the EV begins drawing; instead, the current increases gradually over the ramp-up period, just like after any other reduction.
+The **stability timer resets** whenever either of these happens:
+- The commanded current drops (direct reduction) — the timer is cleared so recovery starts fresh.
+- A ramp-up step is taken — the timer resets so the next step also requires a full stability window of continuous headroom.
+- **The EV starts charging** (status sensor transitions to `Charging`) while the charger is idling at `min_ev_current`. This prevents the current from jumping immediately to the full available headroom when the EV begins drawing; instead, the current increases gradually, step by step, just like after any other reduction.
 
-> ⚠️ **Very low cooldown values (below ~10 s) risk instability** if your service load has frequent spikes or is unpredictable. The recommended minimum is 20–30 s for most installations.
+> ⚠️ **Very low stability-window values (below ~10 s) risk instability** if your service load has frequent spikes or is unpredictable. The recommended minimum is 15–30 s for most installations.
 
 #### Built-in throttling and debounce
 
@@ -288,7 +287,8 @@ The integration includes several mechanisms that limit how often charger command
 
 | Mechanism | What it throttles | Default | Configurable via |
 |---|---|---|---|
-| **Ramp-up cooldown** | Current *increases* after any reduction or headroom drop | 30 s | `number.*_ramp_up_time` (5–300 s) |
+| **Ramp-up stability window** | Current *increases* after any reduction — each step requires headroom for this long | 15 s | `number.*_ramp_up_time` (5–300 s) |
+| **Ramp-up step size** | How many Amps the current rises per stability window | 4 A | `number.*_ramp_up_step` (1–32 A) |
 | **Overload trigger delay** | Overload corrections — transient spikes are absorbed | 2 s | `number.*_overload_trigger_delay` (1–60 s) |
 | **Overload loop interval** | Re-corrections while an overload persists | 5 s | `number.*_overload_loop_interval` (1–60 s) |
 | **Action coalescing** | Redundant charger commands — actions only fire when the target current actually changes (start, stop, or new value) | Always on | — |

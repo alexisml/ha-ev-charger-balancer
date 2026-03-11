@@ -258,9 +258,15 @@ class TestRampUpCooldown:
         reduced = float(hass.states.get(current_set_id).state)
         assert reduced == 15.0
 
-        # Step 3: load drops and cooldown elapsed → should increase
-        mock_time = 1032.0  # 31 s after reduction (> 30 s)
+        # Step 2.5: load immediately eases — starts the stability timer at T=1002
+        mock_time = 1002.0
         hass.states.async_set(POWER_METER, "3002")
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == reduced  # still held
+
+        # Step 3: load drops and stability window elapsed → should increase
+        mock_time = 1032.0  # 30 s after timer start at T=1002
+        hass.states.async_set(POWER_METER, "3003")  # different value to trigger state-change event
         await hass.async_block_till_done()
         after_cooldown = float(hass.states.get(current_set_id).state)
         assert after_cooldown > reduced
@@ -303,6 +309,14 @@ class TestRampUpCooldown:
         reduced = float(hass.states.get(current_set_id).state)
         assert reduced == 15.0
 
+        # Step 2.5: load immediately returns — starts stability timer at T=1002.
+        # The stability window tracks how long headroom has been continuously
+        # sufficient; the timer starts on the first recovery event, not at reduction.
+        mock_time = 1002.0
+        hass.states.async_set(POWER_METER, "3001")
+        await hass.async_block_till_done()
+        assert float(hass.states.get(current_set_id).state) == reduced  # timer started, hold
+
         # Step 3: load returns to near-original but oscillates slightly downward each
         # event — headroom stays well above min_ev_current throughout.  Without the
         # fix these micro-drops would each reset _last_reduction_time, keeping the
@@ -313,12 +327,12 @@ class TestRampUpCooldown:
             await hass.async_block_till_done()
             assert float(hass.states.get(current_set_id).state) == reduced  # still held by cooldown
 
-        # Step 4: cooldown elapses (31 s since the reduction at t=1001) → increase allowed
-        mock_time = 1032.0  # 31 s after reduction
+        # Step 4: stability window elapses (30 s since timer start at T=1002) → increase allowed
+        mock_time = 1032.0  # 30 s after timer start at T=1002
         hass.states.async_set(POWER_METER, "3001")
         await hass.async_block_till_done()
         after_cooldown = float(hass.states.get(current_set_id).state)
         assert after_cooldown > reduced, (
-            "Current did not increase after cooldown elapsed — load fluctuations above "
-            "min_ev_current likely kept resetting _last_reduction_time"
+            "Current did not increase after stability window elapsed — load fluctuations above "
+            "min_ev_current should not reset the stability timer"
         )
