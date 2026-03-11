@@ -9,7 +9,7 @@ Functions:
     compute_target_current      — full single-charger target from service meter (amps)
     clamp_current               — per-charger min/max/step clamping
     distribute_current          — water-filling distribution across N chargers
-    apply_ramp_up_limit         — cooldown before allowing current increase
+    apply_ramp_up_limit         — stability window before allowing current increase
     clamp_to_safe_output        — defense-in-depth output safety clamp
     resolve_balancer_state      — operational state string from balancer conditions
     resolve_fallback_current    — fallback current when power meter is unavailable

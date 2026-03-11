@@ -85,7 +85,7 @@ class EvLoadBalancerCoordinator:
     """Coordinate power-meter events and EV charger balancing logic.
 
     Listens for power-meter state changes, computes the target charging
-    current, applies the ramp-up cooldown, and publishes the result via
+    current, applies the ramp-up stability window, and publishes the result via
     the HA dispatcher so entity platforms can update.
     """
 
@@ -374,17 +374,17 @@ class EvLoadBalancerCoordinator:
 
         When the EV transitions from not-charging to charging while the charger
         is already commanding a non-zero current (i.e., idle at ``min_ev_current``),
-        the ramp-up cooldown is reset so that the first power-meter recompute after
-        the EV starts drawing current will hold the current at the idle level rather
-        than jumping immediately to the full available headroom.  When the charger
-        is stopped (0 A), no ramp-up trigger is set — the normal cooldown logic
+        the ramp-up stability window is armed so that the first power-meter recompute
+        after the EV starts drawing current will hold the current at the idle level
+        rather than jumping immediately to the full available headroom.  When the
+        charger is stopped (0 A), no ramp-up trigger is set — the stability window
         from the previous reduction handles the gradual increase.
 
-        The ramp-up cooldown is only reset when the status sensor transitions
+        The ramp-up stability window is only armed when the status sensor transitions
         explicitly to the ``CHARGING_STATE_VALUE`` state.  Transitions to
         ``unknown``/``unavailable`` are excluded: those use the safe fallback
         (assume charging) for the ``ev_charging`` flag, but should not be treated
-        as an EV-start event that warrants a ramp-up cooldown reset.
+        as an EV-start event that warrants arming the ramp-up stability window.
         """
         new_state = event.data.get("new_state")
         new_state_str = new_state.state if new_state is not None else None
@@ -719,7 +719,7 @@ class EvLoadBalancerCoordinator:
         # min_ev_current.  This tells the charger "you may draw at most the
         # minimum safe current" while the EV is idle or paused, so that when
         # the EV does start drawing current the transition begins from a
-        # predictable low value and the ramp-up cooldown can apply smoothly.
+        # predictable low value and the ramp-up stability window can apply smoothly.
         if not self.ev_charging and target_a > self.min_ev_current:
             target_a = self.min_ev_current
 

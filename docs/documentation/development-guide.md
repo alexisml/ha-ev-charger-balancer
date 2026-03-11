@@ -27,7 +27,7 @@ ha-ev-charger-balancer/
 │   └── translations/            # Localized UI strings
 ├── tests/                       # Test suite
 │   ├── conftest.py              # Shared fixtures
-│   ├── test_load_balancer.py    # Pure-logic unit tests (39 tests)
+│   ├── test_load_balancer.py    # Pure-logic unit tests (99 tests)
 │   ├── test_config_flow.py      # Config flow tests
 │   ├── test_init.py             # Setup/unload tests
 │   ├── test_logging.py          # Logging behavior tests
@@ -114,7 +114,7 @@ python -m pytest tests/ -v
 python -m pytest tests/test_load_balancer.py -v
 ```
 
-These 39 tests cover the core computation functions: available current calculation, clamping, water-filling distribution, and ramp-up cooldown. They run in under 1 second.
+These 99 tests cover the core computation functions: available current calculation, clamping, water-filling distribution, and ramp-up stability window. They run in under 1 second.
 
 ### Config flow and integration tests
 

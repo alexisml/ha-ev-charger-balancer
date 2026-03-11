@@ -161,7 +161,7 @@ class EvLbRampUpTimeNumber(RestoreNumber):
         self._coordinator.ramp_up_time_s = float(self._attr_native_value)
 
     async def async_set_native_value(self, value: float) -> None:
-        """Update the ramp-up cooldown and sync with the coordinator."""
+        """Update the ramp-up stability window and sync with the coordinator."""
         self._attr_native_value = value
         self._coordinator.ramp_up_time_s = value
         self.async_write_ha_state()
