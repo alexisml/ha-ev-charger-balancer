@@ -21,21 +21,23 @@ The original multi-charger plan (`02-2026-02-19-multi-charger-plan.md`) left the
 - An integer scale is easier to reason about than a floating-point weight ratio (e.g. "priority 80 beats priority 60" is more intuitive than "weight 0.6 vs weight 0.4").
 - The 0–100 range is a familiar UX pattern (like volume controls).
 
-### 2. Distribution algorithm: greedy pass with surplus redistribution
+### 2. Distribution algorithm: proportional allocation with surplus redistribution
 
-**Decision:** The balancer uses a greedy priority-ordered pass rather than proportional allocation.
+**Decision:** The balancer uses proportional allocation — each charger's share of available current equals `available_a × (charger_priority / sum_of_all_priorities)`.
 
 **Algorithm:**
 1. Compute total site headroom from the power meter (same formula as MVP).
-2. Sort chargers by priority descending; ties broken by `charger_index` ascending.
-3. Allocate `min(remaining_headroom, max_charger_a)` to each charger in order.
-4. If allocation < `min_ev_a`, set that charger's allocation to 0 and skip consuming headroom.
-5. Pass any remaining headroom to the next charger in priority order.
+2. Allocate `available_a × (priority / priority_sum)` to each charger.
+3. Clamp each share to `max_charger_a`.
+4. If a share < `min_ev_a`, set that charger's allocation to 0 and remove it from the priority sum.
+5. Redistribute freed headroom proportionally to the remaining active chargers; repeat until stable.
+
+**Example:** 100 A available, priorities 50 / 30 / 20 → allocations 50 A / 30 A / 20 A. If the 50-priority charger is capped at 40 A, the remaining 10 A splits 30:20 → chargers 2 and 3 receive 36 A and 24 A.
 
 **Rationale:**
-- Greedy priority order matches user mental models: "charger A has priority over charger B" simply means A is filled first.
+- Proportional allocation directly reflects the user's mental model: "priority 50 means this charger gets twice as much as a priority 25 charger."
 - Surplus redistribution ensures we always maximise total charging delivered — no headroom is wasted.
-- This is simpler to implement and test than a proportional/water-filling approach and avoids the oscillation risk that comes with fractional allocations.
+- This was corrected from the earlier greedy-pass design (which would fill higher-priority chargers fully before any lower-priority charger gets current); the proportional model matches the user requirement stated in the issue: "if we have 100 available amps, and 3 chargers with priority 50-30-20, then chargers get 50-30-20 amps".
 
 ### 3. Tie-breaking: lowest charger_index wins
 
@@ -55,13 +57,13 @@ The original multi-charger plan (`02-2026-02-19-multi-charger-plan.md`) left the
 
 **Decision:** The plan now explicitly distinguishes which inputs/outputs belong to the power meter (shared) vs to each charger (independent).
 
-**Per-power-meter inputs:** `power_meter_entity`, `voltage`, `max_service_current`, `unavailable_behavior`, `unavailable_fallback_current`.
+**Per-power-meter inputs:** `power_meter_entity`, `voltage`, `max_service_current`, `unavailable_behavior`.
 
-**Per-charger inputs:** `action_set_current`, `action_start_charging`, `action_stop_charging`, `charger_status_entity`, `max_charger_current`, `min_ev_current`, `priority`, `charger_index`.
+**Per-charger inputs:** `action_set_current`, `action_start_charging`, `action_stop_charging`, `charger_status_entity`, `max_charger_current`, `min_ev_current`, `unavailable_fallback_current`, `priority`, `charger_index`.
 
 **Per-charger outputs:** `current_set_a/w`, `available_current_a`, `balancer_state`, `ev_charging`, `last_action_*`, `action_latency_ms`.
 
-**Rationale:** This separation clarifies the data model for PR-1-ph2 (multi-charger data model) and ensures that per-charger entities are linked to per-charger HA devices rather than a single shared device.
+**Rationale:** This separation clarifies the data model for PR-1-ph2 (multi-charger data model) and ensures that per-charger entities are linked to per-charger HA devices rather than a single shared device. `unavailable_fallback_current` is per-charger so that different chargers can have different fallback behaviors — including stopping (0 A) — when the power meter is unavailable.
 
 ## What was not changed
 
