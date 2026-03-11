@@ -154,6 +154,7 @@ All entities are grouped under a single device called **EV Charger Load Balancer
 | `sensor.*_last_action_status` | Diagnostic | Result of the most recent charger action call: `success` or `failure`. Useful for automations that react to charger communication health. |
 | `sensor.*_action_latency` | Measurement (ms) | Wall-clock time of the last charger action call in milliseconds, including any retries. Cross-reference with `sensor.*_retry_count` to distinguish slow actions from retried ones. |
 | `sensor.*_retry_count` | Measurement | Number of retries used by the last charger action call. `0` = first-try success; higher values indicate transient communication issues. |
+| `sensor.*_ramp_up_next_step` | Diagnostic (A) | How many Amps the charging current will rise on the next ramp-up step once the stability window elapses. Non-zero only while the balancer is in `ramp_up_hold` state (charger below target). Returns `0 A` when the charger is already at its target or no ramp-up is pending. |
 
 ### Binary sensors
 
@@ -257,7 +258,9 @@ flowchart TD
     D -- YES --> E(["stop_charging — instant"])
     D -- NO --> F{"target_a < current_a?<br/>load increased, must reduce"}
     F -- "YES — instant" --> G(["set_current(target_a)"])
-    F -- "NO — load decreased" --> H{"headroom stable for<br/>≥ ramp_up_time s?"}
+    F -- "NO — increase needed" --> RA{"ramp-up<br/>armed?"}
+    RA -- "NO (first start,<br/>no prior reduction)" --> K(["set_current(target_a)<br/>(direct — no stability window)"])
+    RA -- "YES (after any reduction<br/>or EV-start event)" --> H{"headroom stable for<br/>≥ ramp_up_time s?"}
     H -- "YES — take one step" --> I(["set_current(min(current + step, target_a))"])
     H -- "NO" --> J(["hold current — wait for next cycle"])
 ```
@@ -417,7 +420,7 @@ The `sensor.*_balancer_state` diagnostic sensor tracks what the integration is d
 
 | State | What it means | When you see it |
 |---|---|---|
-| `stopped` | Charger target is 0 A. | Overload, initial state, available current is below minimum, or max charger current is set to 0 A. |
+| `stopped` | Charger target is 0 A. | Overload, initial state, available current is below minimum, or max charger current is set to 0 A. Also shown while waiting for the stability window to elapse after a full stop (the timer counts internally but the state remains `stopped` until the first step fires). |
 | `active` | Charger is running at a steady current. | Normal operation — target hasn't changed since last cycle. |
 | `adjusting` | Charger current just changed this cycle. | Load shifted and the integration adjusted the current. |
 | `ramp_up_hold` | An increase is needed but the stability window hasn't elapsed yet. | Headroom is sufficient but hasn't been stable for `ramp_up_time` seconds yet, or the EV just started drawing current after idling at `min_ev_current`. Only applies when the charger is actively running (current > 0). |
@@ -432,7 +435,8 @@ stateDiagram-v2
     state "DISABLED" as DISABLED
 
     [*] --> STOPPED
-    STOPPED --> ADJUSTING : headroom ≥ min_ev_current AND stability window elapsed
+    STOPPED --> ADJUSTING : headroom ≥ min_ev_current AND no prior reduction (first start — direct)
+    STOPPED --> ADJUSTING : headroom ≥ min_ev_current AND after prior reduction (stability window elapsed)
     ADJUSTING --> ACTIVE : same target next cycle
     ADJUSTING --> STOPPED : overload (target < min_ev_current)
     ADJUSTING --> RAMP_UP_HOLD : increase needed but stability window active
@@ -579,7 +583,7 @@ sequenceDiagram
 ```
 
 1. Sensors restore their last known values (current set, available current, balancer state).
-2. Number entities restore runtime parameters (max charger current, min EV current, ramp-up stability window).
+2. Number entities restore runtime parameters (max charger current, min EV current, ramp-up stability window, ramp-up step size).
 3. The switch restores its enabled/disabled state.
 4. The coordinator defers all meter health checks until **Home Assistant has fully started** (after `EVENT_HOMEASSISTANT_STARTED`). This ensures that dependent integrations — such as your energy monitor or smart meter — have had time to register their entities before the integration evaluates whether the power meter is available.
 5. Once HA is fully started: if the meter is unavailable, the configured fallback is applied immediately. If the meter is healthy, the integration waits for the first power-meter reading.

@@ -364,7 +364,7 @@ def resolve_balancer_state(
 
     - ``"disabled"``     — load balancing switch is off
     - ``"stopped"``      — charger target is 0 A
-    - ``"ramp_up_hold"`` — an increase is needed but the cooldown blocks it
+    - ``"ramp_up_hold"`` — an increase is needed but the stability window blocks it
     - ``"adjusting"``    — the current changed or charging just started
     - ``"active"``       — charger is running at a steady current (no change)
 
@@ -376,7 +376,7 @@ def resolve_balancer_state(
         prev_active:   Whether the charger was active before this cycle.
         prev_current:  The charging current set in the previous cycle (Amps).
         current_set_a: The charging current set in this cycle (Amps).
-        ramp_up_held:  Whether the ramp-up cooldown is blocking an increase.
+        ramp_up_held:  Whether the ramp-up stability window is blocking an increase.
 
     Returns:
         One of ``"disabled"``, ``"stopped"``, ``"ramp_up_hold"``,
