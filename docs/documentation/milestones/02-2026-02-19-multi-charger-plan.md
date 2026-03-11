@@ -47,7 +47,7 @@ Extend the single-charger integration to support N EV chargers sharing the same 
 |---|---|
 | `current_set_a` | Current most recently commanded to this charger in Amps |
 | `current_set_w` | Same, converted to Watts |
-| `available_current_a` | Site headroom proportionally allocated to this charger after surplus redistribution. Normally equals `current_set_a`; differs when ramp-up cooldown or idle clamp reduces the commanded current below the allocated share — useful for diagnosing why a charger is running below its headroom. |
+| `allocated_current_a` | This charger's proportional share of the site's available headroom after surplus redistribution. Normally equals `current_set_a`; differs when ramp-up cooldown or idle clamp reduces the commanded current below the allocated share — useful for diagnosing why this charger is running below its allocated headroom. |
 | `balancer_state` | Operational state string: `stopped`, `active`, `adjusting`, `ramp_up_hold`, `disabled` |
 | `ev_charging` | Boolean — whether the charger reports that an EV is actively charging |
 | `last_action_reason` | Why the last command was issued |
@@ -74,19 +74,24 @@ The balancer runs once per power-meter update cycle. The algorithm is:
    ```
    total_ev_a    = sum of current_set_a for all chargers
    non_ev_a      = max(0, service_current_a − total_ev_a)
-   available_a   = max_service_a − non_ev_a
+   available_a   = max_service_current − non_ev_a
    ```
 
 2. **Proportional allocation** — allocate current to each charger in proportion to its priority value:
    ```
    priority_sum    = sum of priority for all active chargers
-   share_a         = available_a × (charger_priority / priority_sum)
+   if priority_sum > 0:
+       share_a     = available_a × (charger_priority / priority_sum)
+   else:
+       # All active chargers have priority 0 → treat them as equal priority
+       active_count = number of active chargers
+       share_a      = available_a / active_count
    ```
-   Clamp each share to `min(share_a, max_charger_a)`.
+   Clamp each share to `min(share_a, max_charger_current)`.
 
-3. **Stop chargers below minimum** — if a charger's allocated share falls below its `min_ev_a`, set that charger's allocation to `0` (stop charging) and exclude it from the priority sum.
+3. **Stop chargers below minimum** — if a charger's allocated share falls below its `min_ev_current`, set that charger's allocation to `0` (stop charging) and exclude it from the priority sum. **Tie-break:** when two or more equal-priority chargers all fall below `min_ev_current` but `available_a` is enough to run exactly one of them at `min_ev_current`, the charger with the lowest `charger_index` receives current; the rest are stopped.
 
-4. **Redistribute surplus** — headroom freed by capped chargers (allocated at `max_charger_a` with remaining surplus) or stopped chargers (allocation set to `0`) is redistributed proportionally to the remaining active chargers. Repeat steps 2–4 until the allocations stabilise.
+4. **Redistribute surplus** — headroom freed by capped chargers (allocated at `max_charger_current` with remaining surplus) or stopped chargers (allocation set to `0`) is redistributed proportionally to the remaining active chargers. Repeat steps 2–4 until the allocations stabilise.
 
 5. **Ramp-up cooldown and idle clamp** — applied per charger independently, exactly as in the MVP single-charger logic.
 
@@ -94,11 +99,11 @@ The balancer runs once per power-meter update cycle. The algorithm is:
 
 ### Tie-breaking rule
 
-When two or more chargers share the same priority **and available headroom is insufficient to bring more than one charger up to `min_ev_a`**, only the charger with the **lowest `charger_index`** (i.e. the first charger added during configuration) receives current. All other same-priority chargers are stopped.
+When two or more chargers share the same priority **and available headroom is insufficient to bring more than one charger up to `min_ev_current`**, only the charger with the **lowest `charger_index`** (i.e. the first charger added during configuration) receives current. All other same-priority chargers are stopped.
 
 ### Maximise charging principle
 
-The algorithm never withholds current from chargers that can use it. Surplus freed by a charger that is capped at its `max_charger_a` or stopped below `min_ev_a` is always redistributed proportionally to the remaining active chargers. Headroom is only left unused when no remaining charger can accept even `min_ev_a`.
+The algorithm never withholds current from chargers that can use it. Surplus freed by a charger that is capped at its `max_charger_current` or stopped below `min_ev_current` is always redistributed proportionally to the remaining active chargers. Headroom is only left unused when no remaining charger can accept even `min_ev_current`.
 
 ---
 

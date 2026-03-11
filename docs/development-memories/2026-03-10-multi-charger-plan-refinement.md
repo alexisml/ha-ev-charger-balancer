@@ -2,7 +2,7 @@ Title: Multi-Charger Plan Refinement
 Date: 2026-03-10
 Author: alexisml
 Status: approved
-Summary: Documents the design decisions made when refining the Phase 2 multi-charger plan. Replaces the vague "weight/ratio TBD" placeholder with a concrete priority model (0–100, steps of 5), a greedy-with-redistribution distribution algorithm, a well-defined tie-breaking rule, and explicit per-charger vs per-power-meter input/output contracts.
+Summary: Documents the design decisions made when refining the Phase 2 multi-charger plan. Replaces the vague "weight/ratio TBD" placeholder with a concrete priority model (0–100, steps of 5), a proportional allocation with surplus redistribution algorithm, a well-defined tie-breaking rule, and explicit per-charger vs per-power-meter input/output contracts.
 
 ---
 
@@ -61,7 +61,7 @@ The original multi-charger plan (`02-2026-02-19-multi-charger-plan.md`) left the
 
 **Per-charger inputs:** `action_set_current`, `action_start_charging`, `action_stop_charging`, `charger_status_entity`, `max_charger_current`, `min_ev_current`, `unavailable_fallback_current`, `priority`, `charger_index`.
 
-**Per-charger outputs:** `current_set_a/w`, `available_current_a`, `balancer_state`, `ev_charging`, `last_action_*`, `action_latency_ms`.
+**Per-charger outputs:** `current_set_a/w`, `allocated_current_a`, `balancer_state`, `ev_charging`, `last_action_*`, `action_latency_ms`.
 
 **Rationale:** This separation clarifies the data model for PR-1-ph2 (multi-charger data model) and ensures that per-charger entities are linked to per-charger HA devices rather than a single shared device. `unavailable_fallback_current` is per-charger so that different chargers can have different fallback behaviors — including stopping (0 A) — when the power meter is unavailable.
 
