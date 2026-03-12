@@ -40,6 +40,8 @@ Extend the single-charger integration to support N EV chargers sharing the same 
 | `unavailable_fallback_current` | Fallback current (Amps) commanded to this charger when `unavailable_behavior` is `set_current`. Set to `0` to stop this charger when the meter is unavailable. |
 | `priority` | Integer from 0 to 100 (multiples of 5). Determines this charger's proportional share of available current. Higher value = larger share. |
 | `charger_index` | Zero-based position within the power meter's charger group — unique per group, used as a tie-breaker when two chargers share equal priority |
+| `ramp_up_time_s` | Stability window in seconds (default 15 s, range 5–300 s). Available headroom must remain continuously above the current commanded level for this duration before the next ramp-up step is allowed. |
+| `ramp_up_step_a` | Maximum current increase per stability period in Amps (default 4 A, range 1–32 A). The commanded current rises by at most this amount each time the stability window elapses. Set to 0 to jump directly to target on first expiry. |
 
 ### Per-charger outputs (computed per cycle, exposed as HA entities)
 
@@ -48,6 +50,7 @@ Extend the single-charger integration to support N EV chargers sharing the same 
 | `current_set_a` | Current most recently commanded to this charger in Amps |
 | `current_set_w` | Same, converted to Watts |
 | `allocated_current_a` | This charger's proportional share of the site's available headroom after surplus redistribution. Normally equals `current_set_a`; differs when ramp-up cooldown or idle clamp reduces the commanded current below the allocated share — useful for diagnosing why this charger is running below its allocated headroom. |
+| `ramp_up_next_step_a` | The next ramp-up step size (Amps) that will be applied when the stability window next elapses. `0` when ramp-up is not active. |
 | `balancer_state` | Operational state string: `stopped`, `active`, `adjusting`, `ramp_up_hold`, `disabled` |
 | `ev_charging` | Boolean — whether the charger reports that an EV is actively charging |
 | `last_action_reason` | Why the last command was issued |
@@ -100,7 +103,15 @@ The balancer runs once per power-meter update cycle. The algorithm is:
 
 4. **Redistribute surplus** — headroom freed by capped chargers (allocated at `max_charger_current` with remaining surplus) or stopped chargers (allocation set to `0`) is redistributed proportionally to the remaining active chargers. Repeat steps 2–4 until the allocations stabilise.
 
-5. **Ramp-up cooldown and idle clamp** — applied per charger independently, exactly as in the MVP single-charger logic.
+5. **Stepped ramp-up and idle clamp** — applied per charger independently after allocations are finalised:
+
+   **Stepped ramp-up:** Each charger tracks its own `_ramp_up_armed` flag and `_headroom_stable_since` timestamp.
+   - When **not armed** (initial start, no prior reduction): the charger jumps directly to its allocated target without waiting for any stability window.
+   - When **armed** (after any reduction or EV-start event): the current may only increase once available headroom has been continuously above the current commanded level for `ramp_up_time_s` seconds.  Each time the stability window elapses, the commanded current rises by at most `ramp_up_step_a` toward the target; the stability timer then resets so the next step also requires a full window.
+   - **First-step guard:** when `current_set_a < min_ev_current`, the effective step is extended to `max(ramp_up_step_a, min_ev_current − current_set_a)` so the first step always reaches at least `min_ev_current`, preventing an endless start/stop loop.
+   - Reductions are always instant — the stability timer is cleared on any downward command.
+
+   **Idle clamp:** unchanged from the MVP single-charger logic — when the status sensor reports the EV is not actively charging, the charger's commanded current is capped at `min_ev_current`.
 
 **Example:** 100 A available, chargers with priority 50 / 30 / 20 → allocations are 50 A / 30 A / 20 A. If the 50-priority charger is capped at 40 A, the remaining 10 A is split 30:20 → the other two chargers receive 36 A and 24 A.
 
@@ -121,7 +132,7 @@ The algorithm never withholds current from chargers that can use it. Surplus fre
 | PR-1a-ph2: Per-charger data model | Extend the config entry schema to store N chargers. Each charger gets its own unique ID, script entities, current limits, priority, and fallback current. | N chargers can be configured in the config/options flow; each charger has a stable unique ID; data round-trips correctly through HA config entries; unit tests for schema validation pass. |
 | PR-1b-ph2: Per-charger HA entities & devices | Create per-charger HA entity objects and link them to per-charger HA device entries. | Each configured charger appears as a separate device in HA; all per-charger output entities (`current_set_a`, `balancer_state`, etc.) are attached to the correct device; entity registry integration tests pass. |
 | PR-2a-ph2: Priority distribution algorithm | Implement the proportional priority distribution logic as a pure function in `load_balancer.py` with no coordinator coupling. | Available current is allocated proportionally to charger priorities; surplus from capped/stopped chargers is redistributed; tie-breaking by `charger_index` is correct; all edge cases covered by unit tests; no HA runtime required. |
-| PR-2b-ph2: Wire distribution engine into coordinator | Replace the single-charger `compute_target_current` path in the coordinator with the multi-charger distribution engine. Apply ramp-up cooldown and idle clamp per charger. | End-to-end integration test: N chargers receive proportional current on each coordinator cycle; ramp-up hold and idle clamp behave correctly per charger; CI green. |
+| PR-2b-ph2: Wire distribution engine into coordinator | Replace the single-charger `compute_target_current` path in the coordinator with the multi-charger distribution engine. Apply stepped ramp-up (stability window + `ramp_up_step_a` per charger, with first-step guard) and idle clamp per charger. | End-to-end integration test: N chargers receive proportional current on each coordinator cycle; ramp-up hold, per-step advancement, and idle clamp behave correctly per charger; CI green. |
 | PR-3-ph2: Runtime charger management | Options flow for adding/removing chargers and updating priority at runtime. | Chargers can be added/removed and priorities changed at runtime; entities/device links remain consistent; options-flow integration tests pass. |
 | PR-4-ph2: Test stabilization + release | Full integration tests for multi-charger scenarios; documentation updated. | CI green; multi-charger configuration documented in user manual and how-it-works; release notes updated. |
 
