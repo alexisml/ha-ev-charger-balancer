@@ -234,7 +234,7 @@ The integration fires HA events for fault conditions. Use these in automations f
 | `ev_lb_charging_resumed` | Charging resumed after being stopped |
 | `ev_lb_action_failed` | A charger action script failed |
 
-See the [Event Notifications Guide](event-notifications-guide.md) for payloads and automation examples.
+See the [Event Notifications Guide](05-event-notifications-guide.md) for payloads and automation examples.
 
 ---
 
@@ -263,7 +263,7 @@ Yes, as long as you have a sensor reporting total household power in Watts. The 
 
 There are **two approaches** for solar-aware charging:
 
-1. **Limit charger max to solar surplus** (recommended) — keep your normal power meter and use an automation to set `number.*_max_charger_current` based on your surplus. The load balancer then ensures the charger never exceeds the surplus *or* the service limit. See [Combining with solar surplus or time-of-use tariffs](how-it-works.md#combining-with-solar-surplus-or-time-of-use-tariffs) for step-by-step examples with ready-to-use YAML.
+1. **Limit charger max to solar surplus** (recommended) — keep your normal power meter and use an automation to set `number.*_max_charger_current` based on your surplus. The load balancer then ensures the charger never exceeds the surplus *or* the service limit. See [Combining with solar surplus or time-of-use tariffs](03-how-it-works.md#combining-with-solar-surplus-or-time-of-use-tariffs) for step-by-step examples with ready-to-use YAML.
 
 2. **Use a template sensor as the power meter** — create a template sensor that shows only grid import power and use it as the power meter input during initial setup:
 
@@ -290,7 +290,7 @@ All entity states are restored. The coordinator defers all meter evaluation unti
 
 This ensures that integrations providing the power meter (energy monitors, DSMR readers, etc.) have had time to connect before the load balancer evaluates the meter state.
 
-See [How It Works — Restart behavior](how-it-works.md#home-assistant-restart-behavior).
+See [How It Works — Restart behavior](03-how-it-works.md#home-assistant-restart-behavior).
 
 ### How fast does it react to load changes?
 
@@ -310,7 +310,7 @@ Multi-charger support within a single instance (multiple chargers sharing one me
 
 ### Does it support three-phase (multi-phase) installations?
 
-The integration assumes a single-phase supply for all Watt ↔ Amp conversions. It works correctly for single-phase chargers on single-phase services. For three-phase chargers or mixed setups, the single-phase formula may give incorrect results. Workarounds using template sensors are available — see [Single-phase assumption and multi-phase installations](how-it-works.md#single-phase-assumption-and-multi-phase-installations) for detailed guidance, examples, and important caveats.
+The integration assumes a single-phase supply for all Watt ↔ Amp conversions. It works correctly for single-phase chargers on single-phase services. For three-phase chargers or mixed setups, the single-phase formula may give incorrect results. Workarounds using template sensors are available — see [Single-phase assumption and multi-phase installations](03-how-it-works.md#single-phase-assumption-and-multi-phase-installations) for detailed guidance, examples, and important caveats.
 
 ### Is it safe?
 

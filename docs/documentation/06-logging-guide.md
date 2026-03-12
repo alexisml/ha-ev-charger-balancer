@@ -67,7 +67,7 @@ WARNING Action set_current failed via script.ev_set_current: Service not found
 
 ## Balancer state sensor
 
-The integration exposes a **Balancer state** diagnostic sensor (`sensor.*_balancer_state`) that shows the current operational state. This maps to the charger state machine described in the [How It Works](how-it-works.md#balancer-states) guide:
+The integration exposes a **Balancer state** diagnostic sensor (`sensor.*_balancer_state`) that shows the current operational state. This maps to the charger state machine described in the [How It Works](03-how-it-works.md#balancer-states) guide:
 
 | State         | Meaning                                                    |
 |---------------|------------------------------------------------------------|

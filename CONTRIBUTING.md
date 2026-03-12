@@ -50,7 +50,7 @@ Use the **Feature Request** issue template. Describe:
 - The behavior you would like to see
 - Any alternatives you have considered
 
-Before opening a request, check the [roadmap](docs/documentation/development-guide.md#project-roadmap) and existing issues to avoid duplicates.
+Before opening a request, check the [roadmap](docs/documentation/08-development-guide.md#project-roadmap) and existing issues to avoid duplicates.
 
 ---
 
@@ -73,7 +73,7 @@ pip install -r tests/requirements.txt
 python -m pytest tests/ -v
 ```
 
-See the full [Development Guide](docs/documentation/development-guide.md) for architecture details and more test commands.
+See the full [Development Guide](docs/documentation/08-development-guide.md) for architecture details and more test commands.
 
 ---
 

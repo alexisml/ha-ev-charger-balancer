@@ -20,4 +20,4 @@ Ready-to-use Home Assistant script templates for controlling your EV charger wit
 5. **Test each script independently** from **Developer Tools → Actions** before connecting it to the integration.
 6. Configure the scripts in the integration: **Settings → Integrations → Watt-O-Balancer → Configure**.
 
-For detailed guidance, see the [Action Scripts Guide](../documentation/action-scripts-guide.md).
+For detailed guidance, see the [Action Scripts Guide](../documentation/04-action-scripts-guide.md).
