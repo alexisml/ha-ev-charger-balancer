@@ -290,7 +290,7 @@ sequence:
 
 - **Always test manually first.** Before connecting any script to the integration, test it from **Developer Tools → Actions** with realistic variable values.
 - **Use the diagnostic sensors.** Check `sensor.*_last_action_status`, `sensor.*_last_action_error`, and `sensor.*_action_latency` to monitor how your scripts are performing.
-- **Enable debug logs temporarily.** Add `custom_components.ev_lb: debug` to your logger config to see the full computation pipeline and action execution. See the [Logging Guide](logging-guide.md) for details.
+- **Enable debug logs temporarily.** Add `custom_components.ev_lb: debug` to your logger config to see the full computation pipeline and action execution. See the [Logging Guide](06-logging-guide.md) for details.
 - **Monitor the events.** Use Developer Tools → Events to listen for `ev_lb_action_failed` while testing to catch failures in real time.
 
 ### Compatibility notes

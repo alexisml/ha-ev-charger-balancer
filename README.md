@@ -69,28 +69,28 @@ The integration watches your home's power meter. When total service power change
 
 | Guide | Description |
 |---|---|
-| [**Installation & Setup**](docs/documentation/installation-and-setup.md) | Install via HACS, configure step-by-step, verify your setup |
-| [**How It Works**](docs/documentation/how-it-works.md) | What to expect, what NOT to expect, entities reference, algorithm details |
-| [**Troubleshooting & Debugging**](docs/documentation/troubleshooting-and-debugging.md) | Common problems, log interpretation, diagnostic sensors, FAQ |
-| [**Development Guide**](docs/documentation/development-guide.md) | Architecture, running tests/CI locally, contributing, roadmap |
+| [**Installation & Setup**](docs/documentation/02-installation-and-setup.md) | Install via HACS, configure step-by-step, verify your setup |
+| [**How It Works**](docs/documentation/03-how-it-works.md) | What to expect, what NOT to expect, entities reference, algorithm details |
+| [**Troubleshooting & Debugging**](docs/documentation/07-troubleshooting-and-debugging.md) | Common problems, log interpretation, diagnostic sensors, FAQ |
+| [**Development Guide**](docs/documentation/08-development-guide.md) | Architecture, running tests/CI locally, contributing, roadmap |
 
 ### Reference guides
 
 | Guide | Description |
 |---|---|
-| [Action Scripts Guide](docs/documentation/action-scripts-guide.md) | Charger control scripts — OCPP, REST, Modbus, switch examples |
+| [Action Scripts Guide](docs/documentation/04-action-scripts-guide.md) | Charger control scripts — OCPP, REST, Modbus, switch examples |
 | [Starter Script Templates](docs/examples/) | Ready-to-use YAML templates for all charger types |
-| [Event Notifications Guide](docs/documentation/event-notifications-guide.md) | Event types, payloads, automation examples for mobile alerts |
-| [Logging Guide](docs/documentation/logging-guide.md) | Debug logs, log levels, diagnostic sensors |
+| [Event Notifications Guide](docs/documentation/05-event-notifications-guide.md) | Event types, payloads, automation examples for mobile alerts |
+| [Logging Guide](docs/documentation/06-logging-guide.md) | Debug logs, log levels, diagnostic sensors |
 
 ---
 
 ## Quick install (HACS)
 
-1. **Install** via [HACS](https://hacs.xyz/) — see [Installation & Setup](docs/documentation/installation-and-setup.md)
+1. **Install** via [HACS](https://hacs.xyz/) — see [Installation & Setup](docs/documentation/02-installation-and-setup.md)
 2. **Configure** in Settings → Devices & Services → Add Integration → "Watt-O-Balancer"
-3. **Create action scripts** to control your charger — see [Action Scripts Guide](docs/documentation/action-scripts-guide.md)
-4. **Monitor** via dashboard sensors and [event notifications](docs/documentation/event-notifications-guide.md)
+3. **Create action scripts** to control your charger — see [Action Scripts Guide](docs/documentation/04-action-scripts-guide.md)
+4. **Monitor** via dashboard sensors and [event notifications](docs/documentation/05-event-notifications-guide.md)
 
 ---
 
@@ -122,7 +122,7 @@ Configuration is exposed through the integration UI. Conceptually, you will:
 
 ## Contributing
 
-See the [Development Guide](docs/documentation/development-guide.md) for architecture, testing, CI checks, and contribution guidelines.
+See the [Development Guide](docs/documentation/08-development-guide.md) for architecture, testing, CI checks, and contribution guidelines.
 
 Development artifacts (research, design decisions, PR retrospectives) are under [`docs/development-memories/`](docs/development-memories/README.md).
 

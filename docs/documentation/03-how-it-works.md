@@ -735,7 +735,7 @@ The current single-phase formula is correct for the most common use case (single
 
 ## Next steps
 
-- Having issues? See [Troubleshooting & Debugging](troubleshooting-and-debugging.md)
-- Want mobile alerts? See [Event Notifications Guide](event-notifications-guide.md)
-- Need to set up charger scripts? See [Action Scripts Guide](action-scripts-guide.md)
-- Want to contribute? See the [Development Guide](development-guide.md)
+- Having issues? See [Troubleshooting & Debugging](07-troubleshooting-and-debugging.md)
+- Want mobile alerts? See [Event Notifications Guide](05-event-notifications-guide.md)
+- Need to set up charger scripts? See [Action Scripts Guide](04-action-scripts-guide.md)
+- Want to contribute? See the [Development Guide](08-development-guide.md)
