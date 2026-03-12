@@ -49,7 +49,7 @@ Extend the single-charger integration to support N EV chargers sharing the same 
 |---|---|
 | `current_set_a` | Current most recently commanded to this charger in Amps |
 | `current_set_w` | Same, converted to Watts |
-| `allocated_current_a` | This charger's proportional share of the site's available headroom after surplus redistribution. Normally equals `current_set_a`; differs when ramp-up cooldown or idle clamp reduces the commanded current below the allocated share — useful for diagnosing why this charger is running below its allocated headroom. |
+| `allocated_current_a` | This charger's proportional share of the site's available headroom after surplus redistribution. Normally equals `current_set_a`; differs when ramp-up hold or idle clamp reduces the commanded current below the allocated share — useful for diagnosing why this charger is running below its allocated headroom. |
 | `ramp_up_next_step_a` | The next ramp-up step size (Amps) that will be applied when the stability window next elapses. `0` when ramp-up is not active. |
 | `balancer_state` | Operational state string: `stopped`, `active`, `adjusting`, `ramp_up_hold`, `disabled` |
 | `ev_charging` | Boolean — whether the charger reports that an EV is actively charging |
