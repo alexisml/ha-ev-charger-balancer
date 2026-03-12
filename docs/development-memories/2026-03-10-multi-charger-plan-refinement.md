@@ -59,9 +59,9 @@ The original multi-charger plan (`02-2026-02-19-multi-charger-plan.md`) left the
 
 **Per-power-meter inputs:** `power_meter_entity`, `voltage`, `max_service_current`, `unavailable_behavior`.
 
-**Per-charger inputs:** `action_set_current`, `action_start_charging`, `action_stop_charging`, `charger_status_entity`, `max_charger_current`, `min_ev_current`, `unavailable_fallback_current`, `priority`, `charger_index`.
+**Per-charger inputs:** `action_set_current`, `action_start_charging`, `action_stop_charging`, `charger_status_entity`, `max_charger_current`, `min_ev_current`, `unavailable_fallback_current`, `priority`, `charger_index`, `ramp_up_time_s`, `ramp_up_step_a`.
 
-**Per-charger outputs:** `current_set_a/w`, `allocated_current_a`, `balancer_state`, `ev_charging`, `last_action_*`, `action_latency_ms`.
+**Per-charger outputs:** `current_set_a/w`, `allocated_current_a`, `ramp_up_next_step_a`, `balancer_state`, `ev_charging`, `last_action_*`, `action_latency_ms`.
 
 **Rationale:** This separation clarifies the data model for PR-1-ph2 (multi-charger data model) and ensures that per-charger entities are linked to per-charger HA devices rather than a single shared device. `unavailable_fallback_current` is per-charger so that different chargers can have different fallback behaviors — including stopping (0 A) — when the power meter is unavailable.
 
@@ -69,7 +69,7 @@ The original multi-charger plan (`02-2026-02-19-multi-charger-plan.md`) left the
 
 - The single-charger MVP behavior (Phase 1) is unchanged — this refinement only applies to Phase 2.
 - Phase 2 still follows the original PR-1–PR-4-ph2 themes, but PR-1 and PR-2 are now split into sub-milestones (PR-1a/1b and PR-2a/2b).
-- Ramp-up cooldown and idle-clamp behavior remain per-charger, using the same logic as the MVP.
+- Ramp-up (stability-window / stepped) and idle-clamp behavior remain per-charger, using the same logic as the MVP.
 
 ## References
 
