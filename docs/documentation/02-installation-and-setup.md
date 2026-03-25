@@ -105,7 +105,7 @@ Almost all settings can be changed at any time via the **Configure** dialog — 
 | Setting | Changeable via Configure? |
 |---|---|
 | Supply voltage | ✅ Yes |
-| Max service current | ✅ Yes |
+| Max service current | ✅ Yes (requires reload) — or change at any time without a reload via `number.*_max_service_current` on the device page |
 | When power meter is unavailable | ✅ Yes |
 | Fallback current | ✅ Yes |
 | Set current action script | ✅ Yes |
@@ -113,6 +113,8 @@ Almost all settings can be changed at any time via the **Configure** dialog — 
 | Start charging action script | ✅ Yes |
 | Charger status sensor | ✅ Yes |
 | **Power meter sensor** | ❌ **No** — see below |
+
+> **Adjusting the service limit without a reload:** The `number.*_max_service_current` entity on the device page lets you raise or lower the service limit at any time and the new value takes effect on the next power-meter event — no integration reload needed. Changes made this way persist across HA restarts (the value is saved in the HA state cache). The value in the Configure dialog is still used as the starting point on a fresh install or after resetting to defaults.
 
 #### Changing the power meter sensor
 
