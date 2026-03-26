@@ -25,6 +25,7 @@ from pytest_homeassistant_custom_component.common import (
 
 from custom_components.ev_lb.const import (
     DEFAULT_MAX_CHARGER_CURRENT,
+    DEFAULT_MAX_SERVICE_CURRENT,
     DEFAULT_MIN_EV_CURRENT,
     MAX_CHARGER_CURRENT,
     MAX_SERVICE_CURRENT,
@@ -219,7 +220,7 @@ class TestNumberDefaultsAndSync:
         await setup_integration(hass, mock_config_entry)
 
         coordinator = mock_config_entry.runtime_data
-        assert coordinator.max_service_current == 32.0
+        assert coordinator.max_service_current == DEFAULT_MAX_SERVICE_CURRENT
 
     async def test_max_service_current_restores_from_cache(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry

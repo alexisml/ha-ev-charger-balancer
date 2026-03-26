@@ -27,7 +27,7 @@ from custom_components.ev_lb.const import (
     STATE_STOPPED,
     UNAVAILABLE_BEHAVIOR_STOP,
 )
-from conftest import setup_integration, POWER_METER, _BASE_CONFIG
+from conftest import setup_integration, POWER_METER
 
 
 # ---------------------------------------------------------------------------
