@@ -345,6 +345,7 @@ class TestNumberEntities:
         entity_id = ent_reg.async_get_entity_id(
             "number", DOMAIN, f"{mock_config_entry.entry_id}_max_service_current"
         )
+        assert entity_id is not None
 
         await hass.services.async_call(
             "number",
