@@ -35,13 +35,13 @@ from .const import (
     CONF_ACTION_START_CHARGING,
     CONF_ACTION_STOP_CHARGING,
     CONF_CHARGER_STATUS_ENTITY,
-    CONF_MAX_SERVICE_CURRENT,
     CONF_POWER_METER_ENTITY,
     CONF_UNAVAILABLE_BEHAVIOR,
     CONF_UNAVAILABLE_FALLBACK_CURRENT,
     CONF_VOLTAGE,
     CHARGING_STATE_VALUE,
     DEFAULT_MAX_CHARGER_CURRENT,
+    DEFAULT_MAX_SERVICE_CURRENT,
     DEFAULT_MIN_EV_CURRENT,
     DEFAULT_OVERLOAD_LOOP_INTERVAL,
     DEFAULT_OVERLOAD_TRIGGER_DELAY,
@@ -98,7 +98,7 @@ class EvLoadBalancerCoordinator:
         # made via the Configure dialog take effect after the entry reloads.
         _cfg = {**entry.data, **entry.options}
         self._voltage: float = _cfg[CONF_VOLTAGE]
-        self._max_service_current: float = _cfg[CONF_MAX_SERVICE_CURRENT]
+        self.max_service_current: float = DEFAULT_MAX_SERVICE_CURRENT
         self._power_meter_entity: str = entry.data[CONF_POWER_METER_ENTITY]
         self._unavailable_behavior: str = _cfg.get(
             CONF_UNAVAILABLE_BEHAVIOR,
@@ -219,7 +219,7 @@ class EvLoadBalancerCoordinator:
             "(voltage=%.0f V, service_limit=%.0f A, unavailable=%s)",
             self._power_meter_entity,
             self._voltage,
-            self._max_service_current,
+            self.max_service_current,
             self._unavailable_behavior,
         )
 
@@ -494,22 +494,22 @@ class EvLoadBalancerCoordinator:
     # ------------------------------------------------------------------
 
     def _reapply_fallback_limits(self) -> None:
-        """Reapply the fallback current enforcing updated charger parameter limits.
+        """Reapply the fallback current enforcing updated charger and service parameter limits.
 
-        Called when a runtime parameter (e.g. max charger current or min EV
-        current) changes while the power meter is already unavailable.  Unlike
-        :meth:`_apply_fallback_current`, this method does **not** re-fire fault
-        events or persistent notifications — those were already issued when the
-        meter first became unavailable.
+        Called when a runtime parameter (e.g. max charger current, min EV
+        current, or max service current) changes while the power meter is
+        already unavailable.  Unlike :meth:`_apply_fallback_current`, this
+        method does **not** re-fire fault events or persistent notifications —
+        those were already issued when the meter first became unavailable.
 
         Covers all three fallback modes:
 
         - **stop**: applies 0 A (idempotent; action scripts only fire when
           transitioning from active to stopped).
-        - **set_current**: recomputes ``min(fallback, new_max_charger)`` and
-          updates the charger if the capped value differs.
-        - **ignore**: re-clamps ``current_set_a`` to the new charger limits
-          and updates if the value has changed.
+        - **set_current**: recomputes ``min(fallback, new_max_charger, new_max_service)``
+          and updates the charger if the capped value differs.
+        - **ignore**: re-clamps ``current_set_a`` to the new charger and service
+          limits and updates if the value has changed.
         """
         target = compute_fallback_reapply(
             self._unavailable_behavior,
@@ -517,6 +517,7 @@ class EvLoadBalancerCoordinator:
             self.max_charger_current,
             self.current_set_a,
             self.min_ev_current,
+            self.max_service_current,
         )
 
         if target != self.current_set_a:
@@ -709,7 +710,7 @@ class EvLoadBalancerCoordinator:
         available_a, clamped = compute_target_current(
             service_current_a,
             ev_current_estimate,
-            self._max_service_current,
+            self.max_service_current,
             self.max_charger_current,
             self.min_ev_current,
         )
@@ -743,6 +744,22 @@ class EvLoadBalancerCoordinator:
             and target_a >= self.min_ev_current
         ):
             effective_step = max(effective_step, self.min_ev_current - self.current_set_a)
+
+        # Arm ramp-up when the commanded current is at the idle clamp level
+        # (> 0 but ≤ min_ev_current) and the computed target now exceeds that level.
+        # This catches the case where a charger status sensor transitions through
+        # "unknown"/"unavailable" before explicitly reaching the Charging state:
+        # the ev_charging flag flips True (safe fallback) before the explicit
+        # "Charging" transition fires _handle_charger_status_change, so the ramp-up
+        # arm in that handler is never triggered and without this guard the current
+        # would jump immediately from the idle level to the full available headroom.
+        if (
+            not self._ramp_up_armed
+            and 0 < self.current_set_a <= self.min_ev_current
+            and target_a > self.min_ev_current
+        ):
+            self._ramp_up_armed = True
+            self._headroom_stable_since = None
 
         if self._ramp_up_armed:
             final_a, self._headroom_stable_since = apply_ramp_up_limit(
@@ -819,7 +836,7 @@ class EvLoadBalancerCoordinator:
         the service or charger limits, even if upstream logic has a bug.
         """
         # Safety clamp: output must never exceed charger max or service limit
-        clamped_a = clamp_to_safe_output(current_a, self.max_charger_current, self._max_service_current)
+        clamped_a = clamp_to_safe_output(current_a, self.max_charger_current, self.max_service_current)
         if clamped_a != current_a:
             _LOGGER.warning(
                 "Safety clamp: computed %.1f A exceeds safe maximum %.1f A "
@@ -827,7 +844,7 @@ class EvLoadBalancerCoordinator:
                 current_a,
                 clamped_a,
                 self.max_charger_current,
-                self._max_service_current,
+                self.max_service_current,
             )
             current_a = clamped_a
 

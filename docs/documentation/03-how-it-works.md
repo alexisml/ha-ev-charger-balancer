@@ -169,6 +169,7 @@ All entities are grouped under a single device called **EV Charger Load Balancer
 
 | Entity | Range | What it controls |
 |---|---|---|
+| `number.*_max_service_current` | 1–200 A | Your service current limit (breaker rating). The integration will never allow total consumption to exceed this. Changing it takes effect immediately by triggering a recomputation from the last known meter value (or fallback if the meter is unavailable) — no reload needed. You can raise it temporarily to accommodate a higher-power session or lower it to reserve more headroom for other loads. |
 | `number.*_max_charger_current` | 0–80 A | The maximum current your charger can handle. The integration will never set a current higher than this. **Setting this to 0 A stops charging immediately** without running the load-balancing algorithm, and keeps it stopped until changed back to a non-zero value. Change it at runtime to temporarily limit or disable charging. |
 | `number.*_min_ev_current` | 1–32 A | The minimum current at which your charger can operate (IEC 61851 standard: 6 A for AC). If the computed target falls below this, charging stops entirely rather than running at an unsafe low current. |
 | `number.*_ramp_up_time` | 5–300 s | How many seconds the computed headroom must remain continuously sufficient before the current is allowed to rise by one step. If headroom dips below the current commanded level the timer restarts from zero. Lower values react faster but risk oscillation on spiky loads. |
@@ -213,6 +214,7 @@ The balancer is **event-driven** — it does not poll on a timer. A recomputatio
 | Trigger | What happens | Speed |
 |---|---|---|
 | **Power meter state change** | Sensor reports a new Watt value. The coordinator reads it and runs the full algorithm. | Instant — same HA event-loop tick. |
+| **Max service current changed** | User or automation changes the number entity. The coordinator re-reads the current meter value and recomputes immediately. Reducing the limit below the current charging current causes an instant reduction; raising it makes more headroom available on the next recompute. | Instant. |
 | **Max charger current changed** | User or automation changes the number entity. If set to **0 A**, charging stops immediately and all subsequent power meter events output 0 A (load balancing bypassed). For any non-zero value, if meter is available, coordinator re-reads the current meter value and recomputes. If meter is unavailable, the fallback limit is re-applied with the new cap. | Instant. |
 | **Min EV current changed** | Same as above. If the new minimum is higher than the current target, charging stops immediately even while the meter is unavailable. | Instant. |
 | **Load balancing re-enabled** | The switch is turned back on. Full recomputation using current meter value. | Instant. |
@@ -369,6 +371,16 @@ Meter event at t = 16 s:       current = 10 A (first step taken: 6 + 4 A, window
 Meter event at t = 31 s:       current = 14 A (second step: 10 + 4 A)
 ...and so on until target is reached
 ```
+
+The ramp-up trigger fires in two ways:
+
+1. **Explicit `Charging` state transition** — `_handle_charger_status_change` arms the stability window when the sensor transitions directly from a non-Charging state to `Charging` while the charger is at idle current.
+
+2. **Sensor-glitch path** — If the sensor briefly reports `unknown` or `unavailable` before reaching `Charging`, the safe fallback (`ev_charging = True`) lifts the idle clamp before the explicit transition fires. To prevent the current from jumping from `min_ev_current` to the full available headroom in one step, the coordinator also arms the stability window in `_recompute()` whenever it detects the commanded current is at the idle level (`0 < current_set_a ≤ min_ev_current`) and the computed target now exceeds it.
+
+Both paths produce the same gradual ramp-up behavior. The difference is only in which event triggers the arm.
+
+> **Transitions to `unknown`/`unavailable` are safe fallbacks, not ramp-up triggers.** The ramp-up arm in `_handle_charger_status_change` only fires on an explicit transition to the `Charging` state value — glitches to `unknown`/`unavailable` are excluded. The path 2 guard in `_recompute()` catches those cases at the moment the first meter event would otherwise cause a premature jump.
 
 When the charger was at **0 A** (stopped due to insufficient headroom or overload), no ramp-up trigger is set on the status change — the stability window from the previous reduction already governs the gradual increase once headroom recovers.
 
@@ -584,7 +596,7 @@ sequenceDiagram
 ```
 
 1. Sensors restore their last known values (current set, available current, balancer state).
-2. Number entities restore runtime parameters (max charger current, min EV current, ramp-up stability window, ramp-up step size).
+2. Number entities restore runtime parameters (max service current, max charger current, min EV current, ramp-up stability window, ramp-up step size).
 3. The switch restores its enabled/disabled state.
 4. The coordinator defers all meter health checks until **Home Assistant has fully started** (after `EVENT_HOMEASSISTANT_STARTED`). This ensures that dependent integrations — such as your energy monitor or smart meter — have had time to register their entities before the integration evaluates whether the power meter is available.
 5. Once HA is fully started: if the meter is unavailable, the configured fallback is applied immediately. If the meter is healthy, the integration waits for the first power-meter reading.
