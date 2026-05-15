@@ -256,7 +256,7 @@ class TestSensorEntities:
     async def test_current_offset_to_max_sensor_updates_when_max_charger_changes(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Offset sensor reflects max-charger-current changes and remains formula-consistent."""
+        """Offset-to-max sensor updates when max charger current changes and matches displayed charging current."""
         await setup_integration(hass, mock_config_entry)
 
         ent_reg = er.async_get(hass)
