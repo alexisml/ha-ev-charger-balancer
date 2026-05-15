@@ -200,7 +200,7 @@ class TestSensorEntities:
     async def test_available_current_uses_stable_documented_entity_id(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Available-current sensor keeps the documented default object ID for new installs."""
+        """Available-current sensor entity ID remains stable and matches documentation across label changes."""
         await setup_integration(hass, mock_config_entry)
 
         ent_reg = er.async_get(hass)
@@ -227,7 +227,7 @@ class TestSensorEntities:
     async def test_current_offset_to_max_uses_stable_documented_entity_id(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Current-offset sensor keeps the documented default object ID for new installs."""
+        """Current-offset sensor entity ID remains stable and matches documentation across label changes."""
         await setup_integration(hass, mock_config_entry)
 
         ent_reg = er.async_get(hass)
