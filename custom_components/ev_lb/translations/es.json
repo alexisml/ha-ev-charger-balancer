@@ -65,7 +65,10 @@
         "name": "Potencia de carga establecida"
       },
       "available_current": {
-        "name": "Corriente disponible"
+        "name": "Corriente disponible para cargar"
+      },
+      "current_offset_to_max": {
+        "name": "Diferencia de corriente respecto al máximo del cargador"
       },
       "last_action_reason": {
         "name": "Razón de la última acción"

@@ -109,7 +109,7 @@ flowchart TD
 **Check:**
 1. Is `switch.*_load_balancing_enabled` turned **On**?
 2. Is the power meter reporting values? Check `binary_sensor.*_power_meter_status`.
-3. Is the available current above the minimum EV current? Check `sensor.*_available_current` — if it's below `number.*_min_ev_current`, the charger will stay stopped.
+3. Is the available current to charge above the minimum EV current? Check `sensor.*_available_current` (computed from non-EV load only) — if it's below `number.*_min_ev_current`, the charger will stay stopped.
 4. Are action scripts configured? Without scripts, the integration only computes — it doesn't send commands.
 
 ---

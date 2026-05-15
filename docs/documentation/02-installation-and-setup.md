@@ -135,7 +135,8 @@ After configuration, check that everything is working:
 1. **Go to Settings → Devices → EV Charger Load Balancer.** You should see all entities listed under this device.
 
 2. **Check the key sensors:**
-   - `sensor.*_available_current` — should show a value in Amps (this is how much headroom your electrical service has for EV charging right now).
+   - `sensor.*_available_current` — should show a value in Amps (this is the available current to charge, computed from non-EV load only).
+   - `sensor.*_current_offset_to_max` — should show a value in Amps (this is how far the current setpoint is below your configured max charger current).
    - `sensor.*_balancer_state` — should show `stopped` (if available current is below minimum) or `active`/`adjusting` (if there's enough headroom).
    - `binary_sensor.*_power_meter_status` — should be **On** (meter is reporting data).
 

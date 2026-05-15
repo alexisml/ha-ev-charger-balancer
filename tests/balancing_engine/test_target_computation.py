@@ -84,6 +84,40 @@ class TestBasicTargetComputation:
         state = hass.states.get(available_id)
         assert abs(float(state.state) - (32.0 - 3000.0 / 230.0)) < 0.1
 
+    async def test_available_current_sensor_clarifies_non_ev_load_basis(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Available-current sensor includes a description attribute explaining the non-EV load basis."""
+        await setup_integration(hass, mock_config_entry)
+
+        available_id = get_entity_id(
+            hass, mock_config_entry, "sensor", "available_current"
+        )
+        state = hass.states.get(available_id)
+        assert state is not None
+        assert (
+            state.attributes["description"]
+            == "Available current to charge based on non-EV load only."
+        )
+
+    async def test_current_offset_to_max_sensor_updates(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Offset sensor reflects remaining margin to max charger current as load changes."""
+        await setup_integration(hass, mock_config_entry)
+
+        offset_id = get_entity_id(
+            hass, mock_config_entry, "sensor", "current_offset_to_max"
+        )
+
+        # 3000 W -> 18 A setpoint, so offset from max charger current (32 A) is 14 A.
+        hass.states.async_set(POWER_METER, "3000")
+        await hass.async_block_till_done()
+
+        state = hass.states.get(offset_id)
+        assert state is not None
+        assert float(state.state) == 14.0
+
     async def test_active_binary_sensor_turns_on(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:

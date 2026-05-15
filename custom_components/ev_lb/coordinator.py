@@ -173,6 +173,11 @@ class EvLoadBalancerCoordinator:
         """Return the last requested charging power in Watts."""
         return round(self.current_set_a * self._voltage, 1)
 
+    @property
+    def current_offset_to_max_a(self) -> float:
+        """Return the remaining current margin to the configured charger maximum."""
+        return round(max(self.max_charger_current - self.current_set_a, 0.0), 1)
+
     def _init_action_scripts(self, entry: ConfigEntry) -> None:
         """Load action script entity IDs and charger status sensor from the config entry.
 
