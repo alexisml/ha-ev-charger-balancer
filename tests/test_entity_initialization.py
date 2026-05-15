@@ -483,3 +483,25 @@ class TestEnumSensorRestoreValidation:
         state = hass.states.get(entity_id)
         assert state is not None
         assert state.state == "unknown"
+
+    async def test_last_action_status_ignores_unrecognised_restore_value(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Status sensor shows unknown when a cached value is not present in the current options list."""
+        mock_restore_cache_with_extra_data(
+            hass,
+            [
+                (
+                    State(_SENSOR_LAST_ACTION_STATUS, "old_status"),
+                    {"native_value": "old_status", "native_unit_of_measurement": None},
+                ),
+            ],
+        )
+        await setup_integration(hass, mock_config_entry)
+
+        entity_id = get_entity_id(
+            hass, mock_config_entry, "sensor", "last_action_status"
+        )
+        state = hass.states.get(entity_id)
+        assert state is not None
+        assert state.state == "unknown"

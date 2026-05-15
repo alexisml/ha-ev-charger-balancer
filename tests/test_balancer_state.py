@@ -12,6 +12,7 @@ Tests cover:
 """
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -428,13 +429,10 @@ class TestChargerConstrainedSensor:
         state = hass.states.get(entity_id)
         assert state.state == "on"
 
-        # High available headroom — allow balancer to ramp to max
-        # Drive power down enough that commanded current reaches charger max
+        # Directly simulate current reaching the charger max (state mutation, not a balancer-driven ramp)
         coordinator = mock_config_entry.runtime_data
-        # Simulate current reaching the charger max directly via coordinator state
         coordinator.current_set_a = coordinator.max_charger_current
         coordinator.active = True
-        from homeassistant.helpers.dispatcher import async_dispatcher_send
         async_dispatcher_send(hass, coordinator.signal_update)
         await hass.async_block_till_done()
 
