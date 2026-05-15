@@ -87,7 +87,7 @@ class TestBasicTargetComputation:
     async def test_available_current_sensor_description_mentions_non_ev_load(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Available-current sensor displays a description clarifying it excludes EV load from its calculation."""
+        """Users see a description clarifying that available current excludes EV load from its calculation."""
         await setup_integration(hass, mock_config_entry)
 
         available_id = get_entity_id(
