@@ -200,7 +200,7 @@ class TestSensorEntities:
     async def test_current_offset_to_max_sensor_initial_value(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Current-offset sensor starts at the full charger margin before charging begins."""
+        """Offset sensor shows the full configured maximum when no charging current is set."""
         await setup_integration(hass, mock_config_entry)
 
         ent_reg = er.async_get(hass)
@@ -215,7 +215,7 @@ class TestSensorEntities:
     async def test_current_offset_to_max_sensor_updates_on_charging(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Current-offset sensor reflects remaining margin to max charger current as charging rises."""
+        """Offset sensor decreases to show remaining headroom as charger current increases."""
         await setup_integration(hass, mock_config_entry)
 
         ent_reg = er.async_get(hass)
