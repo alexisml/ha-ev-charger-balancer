@@ -33,8 +33,6 @@ from custom_components.ev_lb.const import (
     MIN_EV_CURRENT_MAX,
     MIN_EV_CURRENT_MIN,
     MIN_SERVICE_CURRENT,
-    REASON_POWER_METER_UPDATE,
-    ACTION_STATUS_SUCCESS,
 )
 from conftest import POWER_METER, setup_integration, get_entity_id
 
