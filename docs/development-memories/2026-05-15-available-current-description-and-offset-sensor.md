@@ -59,7 +59,7 @@ This change set addresses two user-facing observability requests:
 
 After PR review, two compatibility clarifications were added:
 
-- Added `_attr_suggested_object_id` on both sensors to keep default entity IDs stable and aligned with docs:
+- Overrode the `suggested_object_id` property on both sensors to keep default entity IDs stable and aligned with docs:
   - `available_current`
   - `current_offset_to_max`
 - Updated `how-it-works.md` to clarify the healthy-meter guarantee:

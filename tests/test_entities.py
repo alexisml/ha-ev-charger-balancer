@@ -253,6 +253,41 @@ class TestSensorEntities:
         await hass.async_block_till_done()
         assert float(hass.states.get(offset_id).state) == 22.0
 
+    async def test_current_offset_to_max_sensor_updates_when_max_charger_changes(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Offset sensor reflects max-charger-current changes and remains formula-consistent."""
+        await setup_integration(hass, mock_config_entry)
+
+        ent_reg = er.async_get(hass)
+        offset_id = ent_reg.async_get_entity_id(
+            "sensor", DOMAIN, f"{mock_config_entry.entry_id}_current_offset_to_max"
+        )
+        current_set_id = ent_reg.async_get_entity_id(
+            "sensor", DOMAIN, f"{mock_config_entry.entry_id}_current_set"
+        )
+        max_charger_current_id = ent_reg.async_get_entity_id(
+            "number", DOMAIN, f"{mock_config_entry.entry_id}_max_charger_current"
+        )
+        assert offset_id is not None
+        assert current_set_id is not None
+        assert max_charger_current_id is not None
+
+        offset_before = float(hass.states.get(offset_id).state)
+
+        # Lower max charger current to 16 A.
+        await hass.services.async_call(
+            "number",
+            "set_value",
+            {"entity_id": max_charger_current_id, "value": 16.0},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+        current_set_after = float(hass.states.get(current_set_id).state)
+        offset_after = float(hass.states.get(offset_id).state)
+        assert offset_after == round(max(16.0 - current_set_after, 0.0), 1)
+        assert offset_after != offset_before
+
     async def test_last_action_reason_sensor_initial_value(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
