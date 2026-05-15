@@ -87,6 +87,10 @@ REASON_MANUAL_OVERRIDE = "manual_override"
 REASON_FALLBACK_UNAVAILABLE = "fallback_unavailable"
 REASON_PARAMETER_CHANGE = "parameter_change"
 
+# Diagnostic: result of the last charger action call
+ACTION_STATUS_SUCCESS = "success"
+ACTION_STATUS_FAILURE = "failure"
+
 # Balancer operational states — correspond to README state diagrams
 STATE_STOPPED = "stopped"
 STATE_ACTIVE = "active"

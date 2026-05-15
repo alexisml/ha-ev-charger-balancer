@@ -31,6 +31,8 @@ from homeassistant.components.persistent_notification import (
 from .const import (
     ACTION_MAX_RETRIES,
     ACTION_RETRY_BASE_DELAY_S,
+    ACTION_STATUS_FAILURE,
+    ACTION_STATUS_SUCCESS,
     CONF_ACTION_SET_CURRENT,
     CONF_ACTION_START_CHARGING,
     CONF_ACTION_STOP_CHARGING,
@@ -124,7 +126,7 @@ class EvLoadBalancerCoordinator:
         self.current_set_a: float = 0.0
         self.available_current_a: float = 0.0
         self.active: bool = False
-        self.last_action_reason: str = ""
+        self.last_action_reason: str | None = None
         self.balancer_state: str = STATE_STOPPED
         self.meter_healthy: bool = True
         self.fallback_active: bool = False
@@ -177,6 +179,17 @@ class EvLoadBalancerCoordinator:
     def current_offset_to_max_a(self) -> float:
         """Return the remaining current margin to the configured charger maximum."""
         return round(max(self.max_charger_current - self.current_set_a, 0.0), 1)
+
+    @property
+    def charger_constrained(self) -> bool:
+        """Return True when the charger is being actively throttled below its configured maximum.
+
+        True only when load balancing is actively providing current (active=True)
+        AND the commanded current is strictly less than the charger's configured maximum.
+        This indicates that available grid headroom, not the charger limit, is the
+        binding constraint — i.e. the load balancer is reducing the charging rate.
+        """
+        return self.active and self.current_set_a < self.max_charger_current
 
     def _init_action_scripts(self, entry: ConfigEntry) -> None:
         """Load action script entity IDs and charger status sensor from the config entry.
@@ -1122,7 +1135,7 @@ class EvLoadBalancerCoordinator:
         """Clear error state and dismiss any action-failed notification."""
         self.last_action_error = None
         self.last_action_timestamp = datetime.now(tz=timezone.utc)
-        self.last_action_status = "success"
+        self.last_action_status = ACTION_STATUS_SUCCESS
         self.action_latency_ms = round(latency_ms, 1)
         self.retry_count = retries
         pn_async_dismiss(
@@ -1137,7 +1150,7 @@ class EvLoadBalancerCoordinator:
         """Log, record, and notify the user about a failed action after retries."""
         self.last_action_error = f"{action_name}: {exc}"
         self.last_action_timestamp = datetime.now(tz=timezone.utc)
-        self.last_action_status = "failure"
+        self.last_action_status = ACTION_STATUS_FAILURE
         self.action_latency_ms = round(latency_ms, 1)
         self.retry_count = retries
         entry_id = self.entry.entry_id

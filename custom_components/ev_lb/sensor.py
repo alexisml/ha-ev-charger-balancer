@@ -15,7 +15,23 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import get_device_info
+from .const import (
+    ACTION_STATUS_FAILURE,
+    ACTION_STATUS_SUCCESS,
+    REASON_FALLBACK_UNAVAILABLE,
+    REASON_MANUAL_OVERRIDE,
+    REASON_PARAMETER_CHANGE,
+    REASON_POWER_METER_UPDATE,
+    STATE_ACTIVE,
+    STATE_ADJUSTING,
+    STATE_DISABLED,
+    STATE_RAMP_UP_HOLD,
+    STATE_STOPPED,
+    UNAVAILABLE_BEHAVIOR_IGNORE,
+    UNAVAILABLE_BEHAVIOR_SET_CURRENT,
+    UNAVAILABLE_BEHAVIOR_STOP,
+    get_device_info,
+)
 from .coordinator import EvLoadBalancerCoordinator
 
 
@@ -228,6 +244,13 @@ class EvLbLastActionReasonSensor(RestoreSensor):
     _attr_has_entity_name = True
     _attr_translation_key = "last_action_reason"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        REASON_POWER_METER_UPDATE,
+        REASON_MANUAL_OVERRIDE,
+        REASON_FALLBACK_UNAVAILABLE,
+        REASON_PARAMETER_CHANGE,
+    ]
     _attr_native_value = None
 
     def __init__(
@@ -242,7 +265,7 @@ class EvLbLastActionReasonSensor(RestoreSensor):
         """Restore last known value and subscribe to coordinator updates."""
         await super().async_added_to_hass()
         last = await self.async_get_last_sensor_data()
-        if last and last.native_value is not None:
+        if last and last.native_value in self._attr_options:
             self._attr_native_value = last.native_value
         self.async_on_remove(
             async_dispatcher_connect(
@@ -271,6 +294,14 @@ class EvLbBalancerStateSensor(RestoreSensor):
     _attr_has_entity_name = True
     _attr_translation_key = "balancer_state"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        STATE_STOPPED,
+        STATE_ACTIVE,
+        STATE_ADJUSTING,
+        STATE_RAMP_UP_HOLD,
+        STATE_DISABLED,
+    ]
     _attr_native_value = None
 
     def __init__(
@@ -285,7 +316,7 @@ class EvLbBalancerStateSensor(RestoreSensor):
         """Restore last known value and subscribe to coordinator updates."""
         await super().async_added_to_hass()
         last = await self.async_get_last_sensor_data()
-        if last and last.native_value is not None:
+        if last and last.native_value in self._attr_options:
             self._attr_native_value = last.native_value
         self.async_on_remove(
             async_dispatcher_connect(
@@ -315,6 +346,12 @@ class EvLbConfiguredFallbackSensor(RestoreSensor):
     _attr_has_entity_name = True
     _attr_translation_key = "configured_fallback"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        UNAVAILABLE_BEHAVIOR_STOP,
+        UNAVAILABLE_BEHAVIOR_IGNORE,
+        UNAVAILABLE_BEHAVIOR_SET_CURRENT,
+    ]
     _attr_native_value = None
 
     def __init__(
@@ -329,7 +366,7 @@ class EvLbConfiguredFallbackSensor(RestoreSensor):
         """Restore last known value and subscribe to coordinator updates."""
         await super().async_added_to_hass()
         last = await self.async_get_last_sensor_data()
-        if last and last.native_value is not None:
+        if last and last.native_value in self._attr_options:
             self._attr_native_value = last.native_value
         self.async_on_remove(
             async_dispatcher_connect(
@@ -495,6 +532,8 @@ class EvLbLastActionStatusSensor(RestoreSensor):
     _attr_has_entity_name = True
     _attr_translation_key = "last_action_status"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [ACTION_STATUS_SUCCESS, ACTION_STATUS_FAILURE]
     _attr_native_value = None
 
     def __init__(
@@ -509,7 +548,7 @@ class EvLbLastActionStatusSensor(RestoreSensor):
         """Restore last known value and subscribe to coordinator updates."""
         await super().async_added_to_hass()
         last = await self.async_get_last_sensor_data()
-        if last and last.native_value is not None:
+        if last and last.native_value in self._attr_options:
             self._attr_native_value = last.native_value
         self.async_on_remove(
             async_dispatcher_connect(

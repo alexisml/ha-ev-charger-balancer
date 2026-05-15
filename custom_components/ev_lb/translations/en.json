@@ -71,13 +71,31 @@
         "name": "Current offset to max charger current"
       },
       "last_action_reason": {
-        "name": "Last action reason"
+        "name": "Last action reason",
+        "state": {
+          "power_meter_update": "Power meter update",
+          "manual_override": "Manual override",
+          "fallback_unavailable": "Meter unavailable fallback",
+          "parameter_change": "Parameter change"
+        }
       },
       "balancer_state": {
-        "name": "Balancer state"
+        "name": "Balancer state",
+        "state": {
+          "stopped": "Stopped",
+          "active": "Active",
+          "adjusting": "Adjusting",
+          "ramp_up_hold": "Ramp-up hold",
+          "disabled": "Disabled"
+        }
       },
       "configured_fallback": {
-        "name": "Configured meter fallback"
+        "name": "Configured meter fallback",
+        "state": {
+          "stop": "Stop charging",
+          "ignore": "Ignore and keep last value",
+          "set_current": "Set a specific current"
+        }
       },
       "ramp_up_next_step": {
         "name": "Next ramp-up step"
@@ -89,7 +107,11 @@
         "name": "Last action timestamp"
       },
       "last_action_status": {
-        "name": "Last action status"
+        "name": "Last action status",
+        "state": {
+          "success": "Success",
+          "failure": "Failure"
+        }
       },
       "action_latency": {
         "name": "Action latency"
@@ -110,6 +132,9 @@
       },
       "ev_charging": {
         "name": "EV charging"
+      },
+      "charger_constrained": {
+        "name": "Load balancing limited"
       }
     },
     "number": {

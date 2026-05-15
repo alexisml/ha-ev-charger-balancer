@@ -8,9 +8,11 @@ Tests cover:
 - Meter status: healthy when reading, unhealthy when unavailable
 - Fallback active: on when meter unavailable, off when meter recovers
 - Configured fallback: reflects the config entry's unavailable_behavior
+- Charger constrained: on when charging below max, off when at max or stopped
 """
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -360,3 +362,79 @@ class TestConfiguredFallbackSensor:
         await setup_integration(hass, mock_config_entry_ignore)
         coordinator = mock_config_entry_ignore.runtime_data
         assert coordinator.configured_fallback == UNAVAILABLE_BEHAVIOR_IGNORE
+
+
+# ---------------------------------------------------------------------------
+# Charger constrained binary sensor
+# ---------------------------------------------------------------------------
+
+
+class TestChargerConstrainedSensor:
+    """The charger constrained sensor shows when load balancing is throttling the charger."""
+
+    async def test_not_constrained_initially(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Charger constrained is off on startup because no charging session is in progress."""
+        await setup_integration(hass, mock_config_entry)
+        coordinator = mock_config_entry.runtime_data
+        assert coordinator.charger_constrained is False
+
+    async def test_constrained_when_charging_below_max(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Charger constrained turns on when an EV is charging and the balancer limits current below the max."""
+        await setup_integration(hass, mock_config_entry)
+        coordinator = mock_config_entry.runtime_data
+
+        # 3000 W at 230 V → ~13 A of non-EV load → ~18 A headroom,
+        # which is > min_ev_current (6 A) but < max_charger_current (32 A).
+        hass.states.async_set(POWER_METER, "3000")
+        await hass.async_block_till_done()
+
+        assert coordinator.active is True
+        assert coordinator.current_set_a < coordinator.max_charger_current
+        assert coordinator.charger_constrained is True
+
+    async def test_not_constrained_when_stopped(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Charger constrained stays off when no EV is charging, even if max_charger_current is high."""
+        await setup_integration(hass, mock_config_entry)
+        coordinator = mock_config_entry.runtime_data
+
+        assert coordinator.active is False
+        assert coordinator.charger_constrained is False
+
+    async def test_constrained_entity_reflects_coordinator(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Binary sensor turns on when the coordinator is throttling and off when charging stops."""
+        await setup_integration(hass, mock_config_entry)
+        entity_id = get_entity_id(
+            hass, mock_config_entry, "binary_sensor", "charger_constrained"
+        )
+
+        # Initially off — no charging
+        state = hass.states.get(entity_id)
+        assert state is not None
+        assert state.state == "off"
+
+        # Trigger a constrained charging session:
+        # 3000 W at 230 V → ~13 A of non-EV load → ~18 A headroom,
+        # which is > min_ev_current (6 A) but < max_charger_current (32 A).
+        hass.states.async_set(POWER_METER, "3000")
+        await hass.async_block_till_done()
+
+        state = hass.states.get(entity_id)
+        assert state.state == "on"
+
+        # Directly simulate current reaching the charger max (state mutation, not a balancer-driven ramp)
+        coordinator = mock_config_entry.runtime_data
+        coordinator.current_set_a = coordinator.max_charger_current
+        coordinator.active = True
+        async_dispatcher_send(hass, coordinator.signal_update)
+        await hass.async_block_till_done()
+
+        state = hass.states.get(entity_id)
+        assert state.state == "off"
