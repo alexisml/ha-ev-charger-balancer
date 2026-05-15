@@ -62,7 +62,7 @@ class TestDeviceRegistration:
         entries = er.async_entries_for_config_entry(
             ent_reg, mock_config_entry.entry_id
         )
-        assert len(entries) == 25  # 13 sensors + 4 binary_sensors + 7 numbers + 1 switch
+        assert len(entries) == 26  # 13 sensors + 5 binary_sensors + 7 numbers + 1 switch
 
         dev_reg = dr.async_get(hass)
         device = dev_reg.async_get_device(
@@ -108,6 +108,7 @@ class TestUniqueIds:
             "meter_status",
             "fallback_active",
             "ev_charging",
+            "charger_constrained",
             "max_charger_current",
             "max_service_current",
             "min_ev_current",
@@ -398,6 +399,21 @@ class TestBinarySensorEntity:
         state = hass.states.get(entity_id)
         assert state is not None
         assert state.state == "on"
+
+    async def test_charger_constrained_binary_sensor_initial_value(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Charger constrained binary sensor starts as off because no charging is happening yet."""
+        await setup_integration(hass, mock_config_entry)
+
+        ent_reg = er.async_get(hass)
+        entity_id = ent_reg.async_get_entity_id(
+            "binary_sensor", DOMAIN, f"{mock_config_entry.entry_id}_charger_constrained"
+        )
+        assert entity_id is not None
+        state = hass.states.get(entity_id)
+        assert state is not None
+        assert state.state == "off"
 
 
 # ---------------------------------------------------------------------------
@@ -704,7 +720,7 @@ class TestUnload:
         entries_before = er.async_entries_for_config_entry(
             ent_reg, mock_config_entry.entry_id
         )
-        assert len(entries_before) == 25
+        assert len(entries_before) == 26
 
         await hass.config_entries.async_unload(mock_config_entry.entry_id)
         await hass.async_block_till_done()

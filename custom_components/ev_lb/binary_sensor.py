@@ -30,6 +30,7 @@ async def async_setup_entry(
             EvLbMeterStatusBinarySensor(entry, coordinator),
             EvLbFallbackActiveBinarySensor(entry, coordinator),
             EvLbEvChargingBinarySensor(entry, coordinator),
+            EvLbChargerConstrainedBinarySensor(entry, coordinator),
         ]
     )
 
@@ -202,4 +203,49 @@ class EvLbEvChargingBinarySensor(BinarySensorEntity, RestoreEntity):
     def _handle_update(self) -> None:
         """Update binary sensor state from coordinator."""
         self._attr_is_on = self._coordinator.ev_charging
+        self.async_write_ha_state()
+
+
+class EvLbChargerConstrainedBinarySensor(BinarySensorEntity, RestoreEntity):
+    """Binary sensor indicating whether the load balancer is actively throttling the charger below its maximum.
+
+    On means an EV is charging and the commanded current is strictly less than the
+    charger's configured maximum — the load balancer is reducing the charging rate to
+    protect the electrical service.  Off means either the charger is idle or it is
+    running at its full configured maximum with no load-based restriction in effect.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "charger_constrained"
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_is_on = False
+
+    def __init__(
+        self, entry: ConfigEntry, coordinator: EvLoadBalancerCoordinator
+    ) -> None:
+        """Initialise the binary sensor."""
+        self._attr_unique_id = f"{entry.entry_id}_charger_constrained"
+        self._attr_device_info = get_device_info(entry)
+        self._coordinator = coordinator
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last known value and subscribe to coordinator updates."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_state()
+        if last and last.state is not None:
+            self._attr_is_on = last.state == "on"
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                self._coordinator.signal_update,
+                self._handle_update,
+            )
+        )
+        self._handle_update()
+
+    @callback
+    def _handle_update(self) -> None:
+        """Update binary sensor state from coordinator."""
+        self._attr_is_on = self._coordinator.charger_constrained
         self.async_write_ha_state()

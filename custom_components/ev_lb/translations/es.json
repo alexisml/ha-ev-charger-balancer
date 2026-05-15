@@ -132,6 +132,9 @@
       },
       "ev_charging": {
         "name": "VE cargando"
+      },
+      "charger_constrained": {
+        "name": "Cargador limitado por carga"
       }
     },
     "number": {

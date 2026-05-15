@@ -180,6 +180,17 @@ class EvLoadBalancerCoordinator:
         """Return the remaining current margin to the configured charger maximum."""
         return round(max(self.max_charger_current - self.current_set_a, 0.0), 1)
 
+    @property
+    def charger_constrained(self) -> bool:
+        """Return True when the charger is being actively throttled below its configured maximum.
+
+        True only when load balancing is actively providing current (active=True)
+        AND the commanded current is strictly less than the charger's configured maximum.
+        This indicates that available grid headroom, not the charger limit, is the
+        binding constraint — i.e. the load balancer is reducing the charging rate.
+        """
+        return self.active and self.current_set_a < self.max_charger_current
+
     def _init_action_scripts(self, entry: ConfigEntry) -> None:
         """Load action script entity IDs and charger status sensor from the config entry.
 
