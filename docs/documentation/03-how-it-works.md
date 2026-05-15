@@ -145,7 +145,7 @@ All entities are grouped under a single device called **EV Charger Load Balancer
 |---|---|---|
 | `sensor.*_charging_current_set` | Measurement (A) | The charging current the integration last sent to the charger. Shows `0` when charging is stopped. This is what your charger *should* be doing. |
 | `sensor.*_power_set` | Measurement (W) | The charging power the integration last sent to the charger, derived from `charging_current_set × voltage`. Shows `0` when charging is stopped. |
-| `sensor.*_available_current` | Measurement (A) | The available current to charge right now, computed from non-EV service load only. The charging current set is always ≤ this value. |
+| `sensor.*_available_current` | Measurement (A) | The available current to charge right now, computed from non-EV service load only. During normal healthy-meter balancing, charging current set is always ≤ this value. In meter-unavailable `set_current` fallback mode, charging may be positive while this sensor remains `0 A`. |
 | `sensor.*_current_offset_to_max` | Measurement (A) | The remaining margin to your configured `number.*_max_charger_current` (`max_charger_current - charging_current_set`). |
 | `sensor.*_last_action_reason` | Diagnostic | Why the last recomputation happened. Values: `power_meter_update` (normal), `manual_override`, `fallback_unavailable`, `parameter_change`. |
 | `sensor.*_balancer_state` | Diagnostic | The integration's operational state right now — see [Balancer states](#balancer-states) below. |

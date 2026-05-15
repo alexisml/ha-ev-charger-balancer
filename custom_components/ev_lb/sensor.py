@@ -149,6 +149,11 @@ class EvLbAvailableCurrentSensor(RestoreSensor):
         self._attr_device_info = get_device_info(entry)
         self._coordinator = coordinator
 
+    @property
+    def suggested_object_id(self) -> str:
+        """Keep the default entity ID stable across label wording changes."""
+        return "available_current"
+
     async def async_added_to_hass(self) -> None:
         """Restore last known value and subscribe to coordinator updates."""
         await super().async_added_to_hass()
@@ -189,6 +194,11 @@ class EvLbCurrentOffsetToMaxSensor(RestoreSensor):
         self._attr_unique_id = f"{entry.entry_id}_current_offset_to_max"
         self._attr_device_info = get_device_info(entry)
         self._coordinator = coordinator
+
+    @property
+    def suggested_object_id(self) -> str:
+        """Provide a stable default entity ID that matches documentation."""
+        return "current_offset_to_max"
 
     async def async_added_to_hass(self) -> None:
         """Restore last known value and subscribe to coordinator updates."""

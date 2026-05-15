@@ -54,3 +54,14 @@ This change set addresses two user-facing observability requests:
 
 - No balancing algorithm behavior was changed; this is observability/UI clarification plus one new derived sensor.
 - The new offset value is clamped at `0` as a defensive measure.
+
+## Follow-up review fixes
+
+After PR review, two compatibility clarifications were added:
+
+- Added `_attr_suggested_object_id` on both sensors to keep default entity IDs stable and aligned with docs:
+  - `available_current`
+  - `current_offset_to_max`
+- Updated `how-it-works.md` to clarify the healthy-meter guarantee:
+  - During normal meter operation, charging current is `<= available_current`.
+  - In meter-unavailable `set_current` fallback mode, charging can be positive while `available_current` remains `0 A`.
