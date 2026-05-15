@@ -71,13 +71,31 @@
         "name": "Diferencia de corriente respecto al máximo del cargador"
       },
       "last_action_reason": {
-        "name": "Razón de la última acción"
+        "name": "Razón de la última acción",
+        "state": {
+          "power_meter_update": "Actualización del medidor",
+          "manual_override": "Anulación manual",
+          "fallback_unavailable": "Respaldo por medidor no disponible",
+          "parameter_change": "Cambio de parámetro"
+        }
       },
       "balancer_state": {
-        "name": "Estado del balanceador"
+        "name": "Estado del balanceador",
+        "state": {
+          "stopped": "Detenido",
+          "active": "Activo",
+          "adjusting": "Ajustando",
+          "ramp_up_hold": "En espera de subida",
+          "disabled": "Desactivado"
+        }
       },
       "configured_fallback": {
-        "name": "Respaldo de medidor configurado"
+        "name": "Respaldo de medidor configurado",
+        "state": {
+          "stop": "Detener carga",
+          "ignore": "Ignorar y mantener último valor",
+          "set_current": "Establecer corriente específica"
+        }
       },
       "ramp_up_next_step": {
         "name": "Próximo paso de subida de corriente"
@@ -89,7 +107,11 @@
         "name": "Última marca de tiempo de acción"
       },
       "last_action_status": {
-        "name": "Último estado de acción"
+        "name": "Último estado de acción",
+        "state": {
+          "success": "Éxito",
+          "failure": "Fallo"
+        }
       },
       "action_latency": {
         "name": "Latencia de acción"
