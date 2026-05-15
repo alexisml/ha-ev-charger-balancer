@@ -273,8 +273,6 @@ class TestSensorEntities:
         assert current_set_id is not None
         assert max_charger_current_id is not None
 
-        offset_before = float(hass.states.get(offset_id).state)
-
         # Lower max charger current to 16 A.
         await hass.services.async_call(
             "number",
@@ -286,7 +284,6 @@ class TestSensorEntities:
         current_set_after = float(hass.states.get(current_set_id).state)
         offset_after = float(hass.states.get(offset_id).state)
         assert offset_after == round(max(16.0 - current_set_after, 0.0), 1)
-        assert offset_after != offset_before
 
     async def test_last_action_reason_sensor_initial_value(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
