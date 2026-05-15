@@ -33,6 +33,8 @@ from custom_components.ev_lb.const import (
     MIN_EV_CURRENT_MAX,
     MIN_EV_CURRENT_MIN,
     MIN_SERVICE_CURRENT,
+    REASON_POWER_METER_UPDATE,
+    ACTION_STATUS_SUCCESS,
 )
 from conftest import POWER_METER, setup_integration, get_entity_id
 
@@ -40,6 +42,8 @@ from conftest import POWER_METER, setup_integration, get_entity_id
 # ("EV Charger Load Balancer") and the entity translation key.
 _SWITCH_ENABLED = "switch.ev_charger_load_balancer_load_balancing_enabled"
 _SENSOR_CURRENT_SET = "sensor.ev_charger_load_balancer_charging_current_set"
+_SENSOR_LAST_ACTION_REASON = "sensor.ev_charger_load_balancer_last_action_reason"
+_SENSOR_LAST_ACTION_STATUS = "sensor.ev_charger_load_balancer_last_action_status"
 _NUMBER_MAX_SERVICE = "number.ev_charger_load_balancer_max_service_current"
 _NUMBER_MAX_CHARGER = "number.ev_charger_load_balancer_max_charger_current"
 _NUMBER_MIN_EV = "number.ev_charger_load_balancer_min_ev_current"
@@ -399,3 +403,85 @@ class TestReloadIntegration:
         # Verify at least one entity has a live state after reload
         switch_id = get_entity_id(hass, mock_config_entry, "switch", "enabled")
         assert hass.states.get(switch_id) is not None
+
+
+# ---------------------------------------------------------------------------
+# ENUM sensor restore validation
+# ---------------------------------------------------------------------------
+
+
+class TestEnumSensorRestoreValidation:
+    """ENUM sensors only restore values that belong to their options list.
+
+    When upgrading from a version that predates SensorDeviceClass.ENUM, the
+    HA restore cache may contain values (e.g. empty string) that are no longer
+    valid enum options.  Restoring such a value would put the entity in an
+    invalid state.  The restore guard in each ENUM sensor ensures only
+    recognised option values are accepted from the cache.
+    """
+
+    async def test_last_action_reason_ignores_empty_string_restore(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Sensor shows unknown when an empty-string legacy cache value is not a valid enum option."""
+        mock_restore_cache_with_extra_data(
+            hass,
+            [
+                (
+                    State(_SENSOR_LAST_ACTION_REASON, ""),
+                    {"native_value": "", "native_unit_of_measurement": None},
+                ),
+            ],
+        )
+        await setup_integration(hass, mock_config_entry)
+
+        entity_id = get_entity_id(
+            hass, mock_config_entry, "sensor", "last_action_reason"
+        )
+        state = hass.states.get(entity_id)
+        assert state is not None
+        assert state.state == "unknown"
+
+    async def test_last_action_reason_ignores_unrecognised_restore_value(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Sensor shows unknown when a cached value is not present in the current options list."""
+        mock_restore_cache_with_extra_data(
+            hass,
+            [
+                (
+                    State(_SENSOR_LAST_ACTION_REASON, "old_reason"),
+                    {"native_value": "old_reason", "native_unit_of_measurement": None},
+                ),
+            ],
+        )
+        await setup_integration(hass, mock_config_entry)
+
+        entity_id = get_entity_id(
+            hass, mock_config_entry, "sensor", "last_action_reason"
+        )
+        state = hass.states.get(entity_id)
+        assert state is not None
+        assert state.state == "unknown"
+
+    async def test_last_action_status_ignores_empty_string_restore(
+        self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
+    ) -> None:
+        """Status sensor shows unknown when an empty-string legacy cache value is not a valid enum option."""
+        mock_restore_cache_with_extra_data(
+            hass,
+            [
+                (
+                    State(_SENSOR_LAST_ACTION_STATUS, ""),
+                    {"native_value": "", "native_unit_of_measurement": None},
+                ),
+            ],
+        )
+        await setup_integration(hass, mock_config_entry)
+
+        entity_id = get_entity_id(
+            hass, mock_config_entry, "sensor", "last_action_status"
+        )
+        state = hass.states.get(entity_id)
+        assert state is not None
+        assert state.state == "unknown"

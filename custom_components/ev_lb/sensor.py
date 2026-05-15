@@ -265,7 +265,7 @@ class EvLbLastActionReasonSensor(RestoreSensor):
         """Restore last known value and subscribe to coordinator updates."""
         await super().async_added_to_hass()
         last = await self.async_get_last_sensor_data()
-        if last and last.native_value is not None:
+        if last and last.native_value in self._attr_options:
             self._attr_native_value = last.native_value
         self.async_on_remove(
             async_dispatcher_connect(
@@ -316,7 +316,7 @@ class EvLbBalancerStateSensor(RestoreSensor):
         """Restore last known value and subscribe to coordinator updates."""
         await super().async_added_to_hass()
         last = await self.async_get_last_sensor_data()
-        if last and last.native_value is not None:
+        if last and last.native_value in self._attr_options:
             self._attr_native_value = last.native_value
         self.async_on_remove(
             async_dispatcher_connect(
@@ -366,7 +366,7 @@ class EvLbConfiguredFallbackSensor(RestoreSensor):
         """Restore last known value and subscribe to coordinator updates."""
         await super().async_added_to_hass()
         last = await self.async_get_last_sensor_data()
-        if last and last.native_value is not None:
+        if last and last.native_value in self._attr_options:
             self._attr_native_value = last.native_value
         self.async_on_remove(
             async_dispatcher_connect(
@@ -548,7 +548,7 @@ class EvLbLastActionStatusSensor(RestoreSensor):
         """Restore last known value and subscribe to coordinator updates."""
         await super().async_added_to_hass()
         last = await self.async_get_last_sensor_data()
-        if last and last.native_value is not None:
+        if last and last.native_value in self._attr_options:
             self._attr_native_value = last.native_value
         self.async_on_remove(
             async_dispatcher_connect(

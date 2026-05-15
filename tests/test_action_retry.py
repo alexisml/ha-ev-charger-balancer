@@ -373,7 +373,7 @@ class TestDiagnosticSensors:
         )
         state = hass.states.get(sensor_id)
         assert state is not None
-        assert state.state in ("unknown", "None", "none")
+        assert state.state == "unknown"
 
     async def test_last_action_status_shows_success_after_action(
         self,
