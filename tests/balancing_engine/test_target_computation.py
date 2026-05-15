@@ -87,7 +87,7 @@ class TestBasicTargetComputation:
     async def test_available_current_sensor_clarifies_non_ev_load_basis(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Users can see that available current is computed from non-EV load only."""
+        """Available-current sensor includes a description attribute explaining the non-EV load basis."""
         await setup_integration(hass, mock_config_entry)
 
         available_id = get_entity_id(
@@ -103,7 +103,7 @@ class TestBasicTargetComputation:
     async def test_current_offset_to_max_sensor_updates(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Users can monitor remaining headroom to the maximum charger current as load changes."""
+        """Offset sensor reflects remaining margin to max charger current as load changes."""
         await setup_integration(hass, mock_config_entry)
 
         offset_id = get_entity_id(
