@@ -16,7 +16,7 @@ That's it. It's a reactive, real-time load balancer for a single EV charger.
 
 - **Automatic current adjustment.** You plug in your EV, and the integration continuously adjusts the charging current based on what the rest of your house is consuming. No manual intervention needed.
 - **Safety-first behavior.** If something goes wrong (meter unavailable, overload), the default response is to stop or reduce charging immediately.
-- **Dashboard visibility.** The integration creates several sensor entities so you can see exactly what it's doing — current being set, available headroom, balancer state, meter health — all visible in the HA dashboard.
+- **Dashboard visibility.** The integration creates several sensor entities so you can see exactly what it's doing — current being set, available current to charge, offset to charger max, balancer state, meter health — all visible in the HA dashboard.
 - **Event notifications.** When faults occur (overload, meter lost, fallback activated), the integration fires HA events and creates persistent notifications. You can build automations on these to get mobile alerts.
 - **State survives restarts.** All entity states are restored after a Home Assistant restart. The charger current stays at its last known value until fresh meter data arrives.
 
@@ -145,7 +145,8 @@ All entities are grouped under a single device called **EV Charger Load Balancer
 |---|---|---|
 | `sensor.*_charging_current_set` | Measurement (A) | The charging current the integration last sent to the charger. Shows `0` when charging is stopped. This is what your charger *should* be doing. |
 | `sensor.*_power_set` | Measurement (W) | The charging power the integration last sent to the charger, derived from `charging_current_set × voltage`. Shows `0` when charging is stopped. |
-| `sensor.*_available_current` | Measurement (A) | The maximum current the EV can safely draw right now given the non-EV service load. The charging current set is always ≤ this value. |
+| `sensor.*_available_current` | Measurement (A) | The available current to charge right now, computed from non-EV service load only. The charging current set is always ≤ this value. |
+| `sensor.*_current_offset_to_max` | Measurement (A) | The remaining margin to your configured `number.*_max_charger_current` (`max_charger_current - charging_current_set`). |
 | `sensor.*_last_action_reason` | Diagnostic | Why the last recomputation happened. Values: `power_meter_update` (normal), `manual_override`, `fallback_unavailable`, `parameter_change`. |
 | `sensor.*_balancer_state` | Diagnostic | The integration's operational state right now — see [Balancer states](#balancer-states) below. |
 | `sensor.*_configured_fallback` | Diagnostic | What the integration is configured to do when the meter goes unavailable: `stop`, `ignore`, or `set_current`. |

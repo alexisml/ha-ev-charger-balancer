@@ -65,7 +65,10 @@
         "name": "Charging power set"
       },
       "available_current": {
-        "name": "Available current"
+        "name": "Available current to charge"
+      },
+      "current_offset_to_max": {
+        "name": "Current offset to max charger current"
       },
       "last_action_reason": {
         "name": "Last action reason"

@@ -31,6 +31,7 @@ async def async_setup_entry(
             EvLbCurrentSetSensor(entry, coordinator),
             EvLbPowerSetSensor(entry, coordinator),
             EvLbAvailableCurrentSensor(entry, coordinator),
+            EvLbCurrentOffsetToMaxSensor(entry, coordinator),
             EvLbLastActionReasonSensor(entry, coordinator),
             EvLbBalancerStateSensor(entry, coordinator),
             EvLbConfiguredFallbackSensor(entry, coordinator),
@@ -130,6 +131,9 @@ class EvLbPowerSetSensor(RestoreSensor):
 class EvLbAvailableCurrentSensor(RestoreSensor):
     """Sensor showing the computed available current headroom (A)."""
 
+    _DESCRIPTION_TEXT = (
+        "Available current to charge based on non-EV load only."
+    )
     _attr_has_entity_name = True
     _attr_translation_key = "available_current"
     _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
@@ -164,6 +168,47 @@ class EvLbAvailableCurrentSensor(RestoreSensor):
     def _handle_update(self) -> None:
         """Update sensor state from coordinator."""
         self._attr_native_value = self._coordinator.available_current_a
+        self._attr_extra_state_attributes = {"description": self._DESCRIPTION_TEXT}
+        self.async_write_ha_state()
+
+
+class EvLbCurrentOffsetToMaxSensor(RestoreSensor):
+    """Sensor showing the current difference to the configured charger maximum (A)."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "current_offset_to_max"
+    _attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
+    _attr_device_class = SensorDeviceClass.CURRENT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_value = 0.0
+
+    def __init__(
+        self, entry: ConfigEntry, coordinator: EvLoadBalancerCoordinator
+    ) -> None:
+        """Initialise the sensor."""
+        self._attr_unique_id = f"{entry.entry_id}_current_offset_to_max"
+        self._attr_device_info = get_device_info(entry)
+        self._coordinator = coordinator
+
+    async def async_added_to_hass(self) -> None:
+        """Restore last known value and subscribe to coordinator updates."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_sensor_data()
+        if last and last.native_value is not None:
+            self._attr_native_value = last.native_value
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                self._coordinator.signal_update,
+                self._handle_update,
+            )
+        )
+        self._handle_update()
+
+    @callback
+    def _handle_update(self) -> None:
+        """Update sensor state from coordinator."""
+        self._attr_native_value = self._coordinator.current_offset_to_max_a
         self.async_write_ha_state()
 
 
