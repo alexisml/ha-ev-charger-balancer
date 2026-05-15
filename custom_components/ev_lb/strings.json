@@ -137,7 +137,7 @@
         "name": "EV charging"
       },
       "charger_constrained": {
-        "name": "Charger load limited"
+        "name": "Load balancing limited"
       }
     },
     "number": {

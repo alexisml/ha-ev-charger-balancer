@@ -134,7 +134,7 @@
         "name": "VE cargando"
       },
       "charger_constrained": {
-        "name": "Cargador limitado por carga"
+        "name": "Balanceo de carga limitado"
       }
     },
     "number": {
