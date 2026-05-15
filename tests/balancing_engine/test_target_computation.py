@@ -84,10 +84,10 @@ class TestBasicTargetComputation:
         state = hass.states.get(available_id)
         assert abs(float(state.state) - (32.0 - 3000.0 / 230.0)) < 0.1
 
-    async def test_available_current_sensor_description_mentions_non_ev_load(
+    async def test_available_current_sensor_clarifies_non_ev_load_basis(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Users see a description clarifying that available current excludes EV load from its calculation."""
+        """Users can see that available current is computed from non-EV load only."""
         await setup_integration(hass, mock_config_entry)
 
         available_id = get_entity_id(
@@ -103,7 +103,7 @@ class TestBasicTargetComputation:
     async def test_current_offset_to_max_sensor_updates(
         self, hass: HomeAssistant, mock_config_entry: MockConfigEntry
     ) -> None:
-        """Offset sensor value reflects the difference between max charger limit and active charging current."""
+        """Users can monitor remaining headroom to the maximum charger current as load changes."""
         await setup_integration(hass, mock_config_entry)
 
         offset_id = get_entity_id(
