@@ -87,7 +87,7 @@ For more on why a custom integration was chosen over AppDaemon or blueprints, se
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.14+ for running the current test dependency stack
 - pip (or your preferred Python package manager)
 
 ### Install dependencies

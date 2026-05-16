@@ -58,7 +58,7 @@ Before opening a request, check the [roadmap](docs/documentation/08-development-
 
 ### Prerequisites
 
-- Python 3.12+
+- Python 3.14+ for running the current test dependency stack
 - pip
 
 ### Install dependencies
