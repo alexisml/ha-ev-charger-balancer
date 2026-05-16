@@ -10,7 +10,7 @@ Summary: Step-by-step instructions for testing the EV charger load-balancing cus
 
 | Requirement | Notes |
 |---|---|
-| Home Assistant (2023.6+) | Core, OS, or Container install |
+| Home Assistant (2024.7.0+) | Core, OS, or Container install |
 | HACS | For installing the custom integration |
 | Python 3.14+ and pytest | For running unit tests locally |
 | AppDaemon 4.x | (Legacy) Only needed if testing the old AppDaemon prototype |

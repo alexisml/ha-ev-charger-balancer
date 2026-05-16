@@ -8,7 +8,7 @@ This guide walks you through installing the integration, configuring it for the 
 
 Before you begin, make sure you have:
 
-- **Home Assistant 2023.6 or later** (Core, OS, or Container install)
+- **Home Assistant 2024.7.0 or later** (Core, OS, or Container install)
 - **[HACS](https://hacs.xyz/) 2.0 or later** for installing the integration
 - **A power meter sensor** — any `sensor.*` entity in Home Assistant that reports your total service power in Watts
 - **An EV charger you can control** — via [lbbrhzn/ocpp](https://github.com/lbbrhzn/ocpp), Modbus, REST API, or any charger controllable through Home Assistant scripts
